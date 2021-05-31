@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
 import seaborn as sns
@@ -10,6 +9,7 @@ import plotly.graph_objects as go
 from plotly.offline import plot
 from plotly.subplots import make_subplots
 import pytz
+sns.set(style='white', palette='deep')
 
 #Funções para iniciar o MetaTrader 5 
 def initialize_metatrader():
@@ -89,8 +89,9 @@ login_verication()
 utc_timezone = pytz.timezone('Etc/UTC')
 win = 'WIN$'
 wdo = 'WDO$'
-date_from = datetime(2021,5,27,9,2,00, tzinfo=utc_timezone)
-date_to = datetime(2021,5,27, 17,00,00, tzinfo=utc_timezone)
+dias_inicio = pd.date_range(start=datetime(2021,5,1,9,2,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 9,2,00, tzinfo=utc_timezone)).tolist()
+dias_fim = pd.date_range(start=datetime(2021,5,1,17,00,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 17,00,00, tzinfo=utc_timezone)).tolist()
+
 print(date_from, date_to)
 timeframe= mt.TIMEFRAME_M1
 ohlc_win = coletando_preco(win,date_from,timeframe,date_to)
@@ -117,83 +118,37 @@ df_wdo = engenharia_de_atributo(ohlc_wdo,period_ma,period_me,period_bollinger,ba
 
 # Plotando o gráfico
 fig = make_subplots(rows=2,cols=2, row_heights=[0.8,0.2])
-#Plotando o Mini Índice
-fig.add_trace(go.Candlestick(x=df_win.index,
-                             open=df_win['open'],
-                             high= df_win['high'],
-                             low=df_win['low'],
-                             close=df_win['close'],
-                             showlegend=False), row=1, col=1)
-fig.add_trace(go.Scatter(x=df_win.index,
-                         y=df_win['ma20high'],
-                         line=dict(color='green'),
-                         mode='lines',
-                         name='{} Period High MA'.format(period_ma)), row=1, col=1)
-fig.add_trace(go.Scatter(x=df_win.index,
-                         y=df_win['ma20low'],
-                         mode='lines',
-                         line=dict(color='red'),
-                         name='{} Period Low MA'.format(period_ma)), row=1, col=1)
 fig.add_trace(go.Scatter(x=df_win.index,
                          y=df_win['close'],
-                         mode='lines',
-                         line=dict(color='purple'),
-                         name='{} Period Close ME'.format(period_me)), row=1, col=1)
-fig.add_trace(go.Scatter(x=df_win.index,
-                         y=df_win['bbupper'],
                          line=dict(color='black'),
                          mode='lines',
-                         name='{} Period BBUpper'.format(period_ma)), row=1, col=1)
-fig.add_trace(go.Scatter(x=df_win.index,
-                        y=df_win['bblow'],
-                        line=dict(color='black'),
-                        mode='lines',
-                        name='{} Period BBUpper'.format(period_ma)), row=1, col=1)
+                         name='Preço de fechamento do Mini Índice'), row=1, col=1)
+fig.add_trace(go.Scatter(x=df_wdo.index,
+                         y=df_wdo['close'],
+                         line=dict(color='black'),
+                         mode='lines',
+                         name='Preço de fechamento do Mini Dólar'), row=1, col=2)
 fig.add_trace(go.Bar(x=df_win.index,
                      y=df_win['real_volume'],
                      name='Volume Real',
                      marker=dict(line=dict(color='black'))), row=2, col=1)
-#Plotando o Mini Dólar
-fig.add_trace(go.Candlestick(x=df_wdo.index,
-                             open=df_wdo['open'],
-                             high= df_wdo['high'],
-                             low=df_wdo['low'],
-                             close=df_wdo['close'],
-                             showlegend=False), row=1, col=2)
-fig.add_trace(go.Scatter(x=df_wdo.index,
-                         y=df_wdo['ma20high'],
-                         line=dict(color='green'),
-                         mode='lines',
-                         name='{} Period High MA'.format(period_ma)), row=1, col=2)
-fig.add_trace(go.Scatter(x=df_wdo.index,
-                         y=df_wdo['ma20low'],
-                         mode='lines',
-                         line=dict(color='red'),
-                         name='{} Period Low MA'.format(period_ma)), row=1, col=2)
-fig.add_trace(go.Scatter(x=df_wdo.index,
-                         y=df_wdo['close'],
-                         mode='lines',
-                         line=dict(color='purple'),
-                         name='{} Period Close ME'.format(period_me)), row=1, col=2)
-fig.add_trace(go.Scatter(x=df_wdo.index,
-                         y=df_wdo['bbupper'],
-                         line=dict(color='black'),
-                         mode='lines',
-                         name='{} Period BBUpper'.format(period_ma)), row=1, col=2)
-fig.add_trace(go.Scatter(x=df_wdo.index,
-                        y=df_wdo['bblow'],
-                        line=dict(color='black'),
-                        mode='lines',
-                        name='{} Period BBUpper'.format(period_ma)), row=1, col=2)
 fig.add_trace(go.Bar(x=df_wdo.index,
                      y=df_wdo['real_volume'],
                      name='Volume Real',
                      marker=dict(line=dict(color='black'))), row=2, col=2)
-
-fig.update_layout(xaxis_rangeslider_visible=False,
-                  title='Cotação do Mini Índice\nData:{} - {}'.format(date_from.date(),date_to.date()))
-
+fig.update_layout(title='Cotação dos dias {} - {}'.format(date_from.date(),date_to.date()))
 plot(fig)
+
+# Alterando os nomes das colunas
+colunas = df_win.columns
+colunas_win = [i+'_win' for i in colunas]
+colunas_wdo = [i+'_wdo' for i in colunas]
+df_win.columns = colunas_win
+df_wdo.columns = colunas_wdo
+
+# Juntando as colunas
+df = pd.concat([df_win,df_wdo], axis=1)
+df.to_csv('dataframe_completo.csv')
 
 
 
