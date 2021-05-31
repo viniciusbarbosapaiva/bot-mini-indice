@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 from plotly.offline import plot
 from plotly.subplots import make_subplots
 import pytz
+import calendar
 sns.set(style='white', palette='deep')
 
 #Funções para iniciar o MetaTrader 5 
@@ -46,27 +47,44 @@ def login_verication():
 
 # Função para coletar preços
 def coletando_preco(ativo, data_0, timeframe, data_1):
+    'data_0 e data_1 são em pd.date_range'
+    
     select = mt.symbol_select(ativo,True)
+    work_day = []
+    weekend_day = []
     if not select:
         print('O ativo {} não existe. Verificar se o código está correto. Coódigo do error = {}'.format(ativo, mt.last_error()))
     else:
         print('O ativo {} existe.'.format(ativo))
-        #date_datetime = datetime.strptime(data, '%d/%m/%y %H:%M:%S')
-        rates = mt.copy_rates_range(ativo,timeframe,data_0,data_1)
-        print('Os preços foram carregados com sucesso')
-        precos = pd.DataFrame(rates)
-        precos['time'] = pd.to_datetime(precos['time'], unit='s')
-        print('Os preços foram convertidos com sucesso.')
-        print('Total de {} registros'.format(len(precos)))
+        for i in np.arange(0,len(data_0)):
+    
+            if calendar.day_name[data_0[i].weekday()] =='Saturday' or calendar.day_name[data_0[i].weekday()] =='Sunday':
+                weekend_day.append(i)
+    
+            else:
+                work_day.append(i)
+    data_0 = data_0[work_day]
+    data_1 = data_1[work_day]
+    
+    precos = pd.DataFrame()
+    for i in np.arange(0,len(data_0)):
+        rates_unico = mt.copy_rates_range(ativo,timeframe,data_0[i].to_pydatetime(),data_1[i].to_pydatetime())
+        df_unico = pd.DataFrame(rates_unico)
+        precos= pd.concat([precos,df_unico]) 
+        
+    precos['time'] = pd.to_datetime(precos['time'], unit='s') 
+    print('Os preços foram carregados com sucesso')
+    print('Total de {} registros'.format(len(precos)))
+    print('A coluna Time foi convertida pata Datetime.')
     return precos   
 
 # Engenharia de atributos
 def engenharia_de_atributo(ohlc,ma_period,me_period, bollinger_period,base):
     df = ohlc.copy() #Copiando o dataset
     df = df.set_index('time', drop=True) #Configurando a coluna time para index
-    df['ma20high'] = df['high'].rolling(ma_period).mean() #Calculando a média móvel da máxima
-    df['ma20low'] = df['low'].rolling(ma_period).mean() #Calculando a média móvel da mínima
-    df['me9close'] = df['close'].ewm(span=me_period, adjust=False, min_periods=me_period).mean() #Calculando a média móvel exponencial do fechamento
+    df['mahigh'] = df['high'].rolling(ma_period).mean() #Calculando a média móvel da máxima
+    df['malow'] = df['low'].rolling(ma_period).mean() #Calculando a média móvel da mínima
+    df['meclose'] = df['close'].ewm(span=me_period, adjust=False, min_periods=me_period).mean() #Calculando a média móvel exponencial do fechamento
  
     #Cálculodas Bandas de Bollinger
     typical_price = ((df['high']+df['low']+df['close'])/3).apply(lambda x: base * np.round(x/base)) 
@@ -74,10 +92,10 @@ def engenharia_de_atributo(ohlc,ma_period,me_period, bollinger_period,base):
     df['bblow'] = typical_price.rolling(bollinger_period).mean()-2*typical_price.rolling(bollinger_period).std()
     
     #Retirando os valores N.A
-    df = df.dropna()
+    #df = df.dropna()
         
     #Arredondando os preços
-    for i in df[['ma20high','ma20low','me9close', 'bbupper','bblow']]:
+    for i in df[['mahigh','malow','meclose', 'bbupper','bblow']]:
         df[i] = df[i].apply(lambda x: base * np.round(x/base)) 
     
     return df    
@@ -89,13 +107,12 @@ login_verication()
 utc_timezone = pytz.timezone('Etc/UTC')
 win = 'WIN$'
 wdo = 'WDO$'
-dias_inicio = pd.date_range(start=datetime(2021,5,1,9,2,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 9,2,00, tzinfo=utc_timezone)).tolist()
-dias_fim = pd.date_range(start=datetime(2021,5,1,17,00,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 17,00,00, tzinfo=utc_timezone)).tolist()
-
-print(date_from, date_to)
+dias_inicio = pd.date_range(start=datetime(2021,5,1,9,2,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 9,2,00, tzinfo=utc_timezone))
+dias_fim = pd.date_range(start=datetime(2021,5,1,17,00,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 17,00,00, tzinfo=utc_timezone))
 timeframe= mt.TIMEFRAME_M1
-ohlc_win = coletando_preco(win,date_from,timeframe,date_to)
-ohlc_wdo = coletando_preco(wdo,date_from,timeframe,date_to)
+
+ohlc_win = coletando_preco(win,dias_inicio,timeframe,dias_fim)
+ohlc_wdo = coletando_preco(wdo,dias_inicio,timeframe,dias_fim)
 
 # Informação sobre o dataset gerado
 ohlc_win.columns
