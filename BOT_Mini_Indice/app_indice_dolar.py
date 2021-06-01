@@ -96,12 +96,12 @@ indices = ('WIN$','WDO$')
 indice_selecionado = st.sidebar.selectbox('Qual será o ativo?', indices)
 
 # Defindo o timeframe
-timeframes = {'1m': mt.TIMEFRAME_M1,
-              '2m': mt.TIMEFRAME_M2,
-              '5m': mt.TIMEFRAME_M5,
-              '10m': mt.TIMEFRAME_M10,
-              '15m': mt.TIMEFRAME_M15,
-              '30m': mt.TIMEFRAME_M30,
+timeframes = {'1min': mt.TIMEFRAME_M1,
+              '2min': mt.TIMEFRAME_M2,
+              '5min': mt.TIMEFRAME_M5,
+              '10min': mt.TIMEFRAME_M10,
+              '15min': mt.TIMEFRAME_M15,
+              '30min': mt.TIMEFRAME_M30,
               '1h': mt.TIMEFRAME_H1,
               '4h':mt.TIMEFRAME_H4}
 timeframe_selecionado = st.sidebar.select_slider('Escolha o timeframe onde o BOT irá realizar as operações:',
@@ -177,9 +177,9 @@ if mensagem_treinamento == True:
 dia_futuro = data_fim + + datetime.timedelta(days=1)
 dia_futuro_inicio = datetime.datetime.combine(dia_futuro,hora_inicio)
 dia_futuro_fim = datetime.datetime.combine(dia_futuro,hora_fim)
-teste = pd.date_range(start = dia_futuro_inicio, end= dia_futuro_fim, freq='30min')
+teste = pd.date_range(start = dia_futuro_inicio, end= dia_futuro_fim, freq=list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])])
 
-list(timeframes.keys())[list(timeframes.values()).index(timeframe_selecionado)]
+list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])]
 mt.TIMEFRAME_H1
 mt.TIMEFRAME_H4
 datetime.datetime.combine(data_inicio,hora_inicio)
