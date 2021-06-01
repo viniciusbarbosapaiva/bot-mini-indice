@@ -84,24 +84,103 @@ login_verication()
 # Definindo o timezone
 utc_timezone = pytz.timezone('Etc/UTC')
 
+# Define o título do Dashboard
+st.title("APP para compra e venda Mini Índice ou Mini Dólar")
+st.header("by Vinícius B. Paiva ([viniciusbarbosapaiva](https://www.linkedin.com/in/vinicius-barbosa-paiva/))")
+
 # Definindo o código dos índices (Provisório)
+st.sidebar.markdown('# Propriedades do APP')
 indices = ('WIN$','WDO$')
 
+# Definindo qual Índice usaremos por vez
+indice_selecionado = st.sidebar.selectbox('Qual será o ativo?', indices)
+
+# Defindo o timeframe
+timeframes = {'1m': mt.TIMEFRAME_M1,
+              '2m': mt.TIMEFRAME_M2,
+              '5m': mt.TIMEFRAME_M5,
+              '10m': mt.TIMEFRAME_M10,
+              '15m': mt.TIMEFRAME_M15,
+              '30m': mt.TIMEFRAME_M30,
+              '1h': mt.TIMEFRAME_H1,
+              '4h':mt.TIMEFRAME_H4}
+timeframe_selecionado = st.sidebar.select_slider('Escolha o timeframe onde o BOT irá realizar as operações:',
+                                         list(timeframes.keys()))
+
+# Definindo a hora início e fim que será coletado os dados
+import datetime
+hora_inicio = st.sidebar.time_input('Horário inicial para coleta dos dados',
+                                    datetime.time(9, 00))
+hora_fim = st.sidebar.time_input('Horário final para coleta dos dados',
+                                    datetime.time(17, 00))
+
+# Definindo as datas de início e fim
+data_inicio = st.sidebar.date_input('Data inicial para coleta dos dados',
+                               datetime.date(2021, 5, 1))
+data_fim = st.sidebar.date_input('Data final para coleta dos dados',
+                               datetime.date(2021, 5, 28))
+
 # Data de início e fim
-dias_inicio = pd.date_range(start=datetime(2021,5,1,9,2,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 9,2,00, tzinfo=utc_timezone))
-dias_fim = pd.date_range(start=datetime(2021,5,1,17,00,00, tzinfo=utc_timezone), end=datetime(2021,5,28, 17,00,00, tzinfo=utc_timezone))
-timeframe= mt.TIMEFRAME_M1
+dias_inicio = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_inicio), end=datetime.datetime.combine(data_fim,hora_inicio),tz=utc_timezone)
+dias_fim = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_fim), end=datetime.datetime.combine(data_fim,hora_fim),tz=utc_timezone)
 
-# Define o título do Dashboard
-st.title("App para compra e venda Mini Índice ou Mini Dólar")
-st.title("Dashboard em Tempo Rea")
+# Extraindo os dados
+st.cache()
+mensagem = st.text('Carregando os dados...')
+dados = coletando_preco(indice_selecionado,dias_inicio,
+                        timeframes[timeframe_selecionado],dias_fim)
+mensagem.text('Carregando os dados...Concluído!')
 
-ohlc_win = coletando_preco(win,dias_inicio,timeframe,dias_fim)
-ohlc_wdo = coletando_preco(wdo,dias_inicio,timeframe,dias_fim)
+# Sub Título
+st.subheader('Visualização dos Dados Brutos')
+st.write(dados.head())
+st.write(dados.tail())
 
+# Função para o plot dos dados brutos
+def plot_dados_brutos():
+    st.subheader('Preço de Abertura e Fechamento do {}'.format(indice_selecionado))
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(x=dados['time'],
+                             open=dados['open'],
+                             high=dados['high'],
+                             low=dados['low'],
+                             close=dados['close'],
+                             name='Preço de Abertura do {}'.format(indice_selecionado)))
+    
+    fig.layout.update(xaxis_rangeslider_visible=True) #title_text='Preço de Abertura e Fechamento do {}'.format(indice_selecionado)
+    st.plotly_chart(fig)
 
+# Executa a função
+plot_dados_brutos()
 
+# Texto Previsão
+st.subheader('Previsão de Machine Learning')
 
+# Preparando os dados para as previsões
+df_treino = dados[['time', 'close']]
+df_treino = df_treino.rename(columns={'time':'ds', 'close':'y'})
 
+# Criando o modelo
+model = Prophet()
 
+# Condicional para treinamento do modelo
+treinar = (True,False)
+mensagem_treinamento = st.text('Modelo ainda não está treinado!')
+treinar_modelo = st.sidebar.selectbox("Treinar o modelo?",treinar)
 
+# Treinando o modelo
+if mensagem_treinamento == True:
+    model.fit(df_treino)
+    mensagem_treinamento.text('Modelo treinado!')
+
+# Definindo o horizonte de previsão
+dia_futuro = data_fim + + datetime.timedelta(days=1)
+dia_futuro_inicio = datetime.datetime.combine(dia_futuro,hora_inicio)
+dia_futuro_fim = datetime.datetime.combine(dia_futuro,hora_fim)
+teste = pd.date_range(start = dia_futuro_inicio, end= dia_futuro_fim, freq='30min')
+
+list(timeframes.keys())[list(timeframes.values()).index(timeframe_selecionado)]
+mt.TIMEFRAME_H1
+mt.TIMEFRAME_H4
+datetime.datetime.combine(data_inicio,hora_inicio)
+pd.to_datetime(mt.TIMEFRAME_H1, unit='s').time()
