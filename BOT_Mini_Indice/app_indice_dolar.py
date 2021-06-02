@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from fbprophet import Prophet
 from fbprophet.plot import plot_plotly
 from plotly import graph_objs as go
+import time
 
 #Funções para iniciar o MetaTrader 5 
 def initialize_metatrader():
@@ -84,6 +85,9 @@ login_verication()
 # Definindo o timezone
 utc_timezone = pytz.timezone('Etc/UTC')
 
+# Configurando layout página
+st.set_page_config(layout="wide")
+
 # Define o título do Dashboard
 st.title("APP para compra e venda Mini Índice ou Mini Dólar")
 st.header("by Vinícius B. Paiva ([viniciusbarbosapaiva](https://www.linkedin.com/in/vinicius-barbosa-paiva/))")
@@ -102,9 +106,8 @@ timeframes = {'1min': mt.TIMEFRAME_M1,
               '10min': mt.TIMEFRAME_M10,
               '15min': mt.TIMEFRAME_M15,
               '30min': mt.TIMEFRAME_M30,
-              '1h': mt.TIMEFRAME_H1,
-              '4h':mt.TIMEFRAME_H4}
-timeframe_selecionado = st.sidebar.select_slider('Escolha o timeframe onde o BOT irá realizar as operações:',
+              '1h': mt.TIMEFRAME_H1}
+timeframe_selecionado = st.sidebar.selectbox('Escolha o timeframe onde o BOT irá realizar as operações:',
                                          list(timeframes.keys()))
 
 # Definindo a hora início e fim que será coletado os dados
@@ -118,7 +121,7 @@ hora_fim = st.sidebar.time_input('Horário final para coleta dos dados',
 data_inicio = st.sidebar.date_input('Data inicial para coleta dos dados',
                                datetime.date(2021, 5, 1))
 data_fim = st.sidebar.date_input('Data final para coleta dos dados',
-                               datetime.date(2021, 5, 28))
+                               datetime.date(2021, 6, 1))
 
 # Data de início e fim
 dias_inicio = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_inicio), end=datetime.datetime.combine(data_fim,hora_inicio),tz=utc_timezone)
@@ -126,15 +129,8 @@ dias_fim = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_fim), 
 
 # Extraindo os dados
 st.cache()
-mensagem = st.text('Carregando os dados...')
 dados = coletando_preco(indice_selecionado,dias_inicio,
-                        timeframes[timeframe_selecionado],dias_fim)
-mensagem.text('Carregando os dados...Concluído!')
-
-# Sub Título
-st.subheader('Visualização dos Dados Brutos')
-st.write(dados.head())
-st.write(dados.tail())
+                            timeframes[timeframe_selecionado],dias_fim)
 
 # Função para o plot dos dados brutos
 def plot_dados_brutos():
@@ -147,12 +143,24 @@ def plot_dados_brutos():
                              close=dados['close'],
                              name='Preço de Abertura do {}'.format(indice_selecionado)))
     
-    fig.layout.update(xaxis_rangeslider_visible=True) #title_text='Preço de Abertura e Fechamento do {}'.format(indice_selecionado)
+    fig.layout.update(xaxis_rangeslider_visible=False) #title_text='Preço de Abertura e Fechamento do {}'.format(indice_selecionado)
     st.plotly_chart(fig)
 
-# Executa a função
-plot_dados_brutos()
+# Tabela dos Dados
+col4,col5,col6 = st.beta_columns((1,1,1))
+col4.subheader('Visualização dos Primeiros Cinco Dias do Mês {}.'.format(data_inicio.month))
+col4.write(dados[['time','open','high','low','close']].head())
+col5.text('')
+col6.subheader('Visualização dos Últimos Cinco Dias do Mês {}.'.format(data_fim.month))
+col6.write(dados[['time','open','high','low','close']].head()) 
 
+# Executa a função plot 
+col1,col2,col3 = st.beta_columns((2,1,2))
+col1.text('')
+with col2:
+    plot_dados_brutos()
+col3.text('')
+    
 # Texto Previsão
 st.subheader('Previsão de Machine Learning')
 
@@ -164,23 +172,55 @@ df_treino = df_treino.rename(columns={'time':'ds', 'close':'y'})
 model = Prophet()
 
 # Condicional para treinamento do modelo
-treinar = (True,False)
+treinar = (False,True)
 mensagem_treinamento = st.text('Modelo ainda não está treinado!')
 treinar_modelo = st.sidebar.selectbox("Treinar o modelo?",treinar)
 
 # Treinando o modelo
-if mensagem_treinamento == True:
+if treinar_modelo == True:
+# Prepara as datas futuras para as previsões
+    dia_futuro = data_fim + datetime.timedelta(days=1)
+    dia_futuro_inicio = datetime.datetime.combine(dia_futuro,hora_inicio)
+    dia_futuro_fim = datetime.datetime.combine(dia_futuro,hora_fim)
+    dia_futuro_range = pd.date_range(start = dia_futuro_inicio, end= dia_futuro_fim, freq=list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])])
+    dia_futuro_range.names = ['ds']
+    dia_futuro_range = dia_futuro_range.to_frame()
+    dia_futuro_range.index = [i for i in np.arange(0,len(dia_futuro_range))]
+
+    futuro = pd.concat([df_treino['ds'].to_frame(),dia_futuro_range]).reset_index(drop=True)
+
+    mensagem_treinamento = st.text('Modelo ainda não está treinado!')
     model.fit(df_treino)
     mensagem_treinamento.text('Modelo treinado!')
+# Faz as previsões
+    forecast = model.predict(futuro)
+    forecast.columns
+    base = {indices[0]:5,
+        indices[1]:0.5}
 
-# Definindo o horizonte de previsão
-dia_futuro = data_fim + + datetime.timedelta(days=1)
-dia_futuro_inicio = datetime.datetime.combine(dia_futuro,hora_inicio)
-dia_futuro_fim = datetime.datetime.combine(dia_futuro,hora_fim)
-teste = pd.date_range(start = dia_futuro_inicio, end= dia_futuro_fim, freq=list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])])
 
-list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])]
-mt.TIMEFRAME_H1
-mt.TIMEFRAME_H4
-datetime.datetime.combine(data_inicio,hora_inicio)
-pd.to_datetime(mt.TIMEFRAME_H1, unit='s').time()
+    for i in np.arange(0,len(indices)):
+        if indices[i] == list(base.keys())[0]:
+            forecast['yhat'] = forecast['yhat'].apply(lambda x: base[list(base.keys())[0]] * np.round(x/base[list(base.keys())[0]]))
+            forecast['yhat'] = forecast['yhat'].apply(lambda x:np.float64(x))
+        else:
+            forecast['yhat'] = forecast['yhat'].apply(lambda x: base[list(base.keys())[1]] * np.round(x/base[list(base.keys())[1]]))
+            forecast['yhat'] = forecast['yhat'].apply(lambda x:np.float64(x))
+        
+# Sub título
+    st.subheader('Dados Previstos')
+# Dados Previstos
+    st.write(forecast['yhat'].tail())
+# Título
+    st.subheader('Previsão de {} para o {}'.format(list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
+             indice_selecionado))
+# plot
+    grafico2 = plot_plotly(model,forecast)            
+    grafico2.update_traces(marker=dict(size=5,
+                                       line=dict(width=2,
+                                                 color='DarkSlateGrey')),
+                  selector=dict(mode='markers'))
+    st.plotly_chart(grafico2)
+
+#datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
+
