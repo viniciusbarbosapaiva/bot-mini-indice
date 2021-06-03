@@ -12,6 +12,8 @@ from fbprophet import Prophet
 from fbprophet.plot import plot_plotly
 from plotly import graph_objs as go
 import time
+from PIL import Image
+from sklearn.metrics import r2_score
 
 #Funções para iniciar o MetaTrader 5 
 def initialize_metatrader():
@@ -73,11 +75,21 @@ def coletando_preco(ativo, data_0, timeframe, data_1):
         df_unico = pd.DataFrame(rates_unico)
         precos= pd.concat([precos,df_unico]) 
         
-    precos['time'] = pd.to_datetime(precos['time'], unit='s') 
+    precos['time'] = pd.to_datetime(precos['time'], unit='s')
+    if ativo == 'WIN$':
+        precos['close'] = precos['close'].apply(lambda x: 5 * np.round(x/5))
+    else:
+        precos['close'] = precos['close'].apply(lambda x: 0.5 * np.round(x/0.5))
     print('Os preços foram carregados com sucesso')
     print('Total de {} registros'.format(len(precos)))
     print('A coluna Time foi convertida pata Datetime.')
     return precos   
+
+# Função para o Expert Advisor
+def expert():
+    codigo = ['WIN', 'WDO']
+    st.selectbox('Qual o código?',codigo)
+    st.button('Voltar para o Painel Principal', key='back_again')
 
 # Abrindo o terminal do MetaTrader 5
 login_verication()
@@ -89,12 +101,17 @@ utc_timezone = pytz.timezone('Etc/UTC')
 st.set_page_config(layout="wide")
 
 # Define o título do Dashboard
-st.title("APP para compra e venda Mini Índice ou Mini Dólar")
-st.header("by Vinícius B. Paiva ([viniciusbarbosapaiva](https://www.linkedin.com/in/vinicius-barbosa-paiva/))")
+image = Image.open(r'C:\Users\eng2\Desktop\bot-mini-indice\BOT_Mini_Indice\logo\LOGO 01-03.png')
+image = image.resize((200, 200), Image.ANTIALIAS)
+st.markdown('---')
+c1,c2,c3 = st.beta_columns((1,1,1))
+c1.image(image)
+c2.title("APP para compra e venda Mini Índice ou Mini Dólar")
+c2.subheader("Autor: Vinícius B. Paiva ([LinkedIn](https://www.linkedin.com/in/vinicius-barbosa-paiva/)) ([GitHub](https://github.com/viniciusbarbosapaiva))")
 
 # Definindo o código dos índices (Provisório)
 st.sidebar.markdown('# Propriedades do APP')
-indices = ('WIN$','WDO$')
+indices = ('WDO$','WIN$')
 
 # Definindo qual Índice usaremos por vez
 indice_selecionado = st.sidebar.selectbox('Qual será o ativo?', indices)
@@ -134,8 +151,8 @@ dados = coletando_preco(indice_selecionado,dias_inicio,
 
 # Função para o plot dos dados brutos
 def plot_dados_brutos():
-    st.subheader('Preço de Abertura e Fechamento do {}'.format(indice_selecionado))
-    fig = go.Figure()
+    #st.subheader('Preço de Abertura e Fechamento do {}'.format(indice_selecionado))
+    fig = go.Figure(layout=go.Layout(height=600, width=1800))
     fig.add_trace(go.Candlestick(x=dados['time'],
                              open=dados['open'],
                              high=dados['high'],
@@ -143,37 +160,40 @@ def plot_dados_brutos():
                              close=dados['close'],
                              name='Preço de Abertura do {}'.format(indice_selecionado)))
     
-    fig.layout.update(xaxis_rangeslider_visible=False) #title_text='Preço de Abertura e Fechamento do {}'.format(indice_selecionado)
+    fig.layout.update(xaxis_rangeslider_visible=True,
+                      title_text='Preço de Abertura e Fechamento do {}'.format(indice_selecionado)) #title_text='Preço de Abertura e Fechamento do {}'.format(indice_selecionado)
     st.plotly_chart(fig)
 
 # Tabela dos Dados
 col4,col5,col6 = st.beta_columns((1,1,1))
 col4.subheader('Visualização dos Primeiros Cinco Dias do Mês {}.'.format(data_inicio.month))
-col4.write(dados[['time','open','high','low','close']].head())
-col5.text('')
-col6.subheader('Visualização dos Últimos Cinco Dias do Mês {}.'.format(data_fim.month))
-col6.write(dados[['time','open','high','low','close']].head()) 
-
-# Executa a função plot 
-col1,col2,col3 = st.beta_columns((2,1,2))
-col1.text('')
-with col2:
+col4.write(dados[['time','close']].head())
+col5.subheader('Parâmetros do Expert Advisor (Robô)')
+expert_advisor = col5.button('Click Aqui para Configurar o EA')
+st.markdown('---')
+if expert_advisor:
+    expert()
+    st.markdown('---')
+else:
+    # Executa a função plot 
     plot_dados_brutos()
-col3.text('')
+    st.markdown('---')
+col6.subheader('Visualização dos Últimos Cinco Dias do Mês {}.'.format(data_fim.month))
+col6.write(dados[['time','close']].tail()) 
     
 # Texto Previsão
 st.subheader('Previsão de Machine Learning')
+mensagem_treinamento = st.text('Modelo ainda não está treinado!')
 
 # Preparando os dados para as previsões
 df_treino = dados[['time', 'close']]
 df_treino = df_treino.rename(columns={'time':'ds', 'close':'y'})
 
 # Criando o modelo
-model = Prophet()
+model = Prophet(changepoint_prior_scale=0.15,yearly_seasonality=True,daily_seasonality=True)
 
 # Condicional para treinamento do modelo
 treinar = (False,True)
-mensagem_treinamento = st.text('Modelo ainda não está treinado!')
 treinar_modelo = st.sidebar.selectbox("Treinar o modelo?",treinar)
 
 # Treinando o modelo
@@ -188,39 +208,63 @@ if treinar_modelo == True:
     dia_futuro_range.index = [i for i in np.arange(0,len(dia_futuro_range))]
 
     futuro = pd.concat([df_treino['ds'].to_frame(),dia_futuro_range]).reset_index(drop=True)
-
-    mensagem_treinamento = st.text('Modelo ainda não está treinado!')
-    model.fit(df_treino)
+    fit_model = model.fit(df_treino)    
     mensagem_treinamento.text('Modelo treinado!')
+    
 # Faz as previsões
     forecast = model.predict(futuro)
-    forecast.columns
-    base = {indices[0]:5,
-        indices[1]:0.5}
-
-
-    for i in np.arange(0,len(indices)):
-        if indices[i] == list(base.keys())[0]:
-            forecast['yhat'] = forecast['yhat'].apply(lambda x: base[list(base.keys())[0]] * np.round(x/base[list(base.keys())[0]]))
-            forecast['yhat'] = forecast['yhat'].apply(lambda x:np.float64(x))
-        else:
-            forecast['yhat'] = forecast['yhat'].apply(lambda x: base[list(base.keys())[1]] * np.round(x/base[list(base.keys())[1]]))
-            forecast['yhat'] = forecast['yhat'].apply(lambda x:np.float64(x))
+    if indice_selecionado == 'WIN$':
+        forecast['yhat'] = forecast['yhat'].apply(lambda x: 5 * np.round(x/5))
+        forecast['yhat'] = forecast['yhat'].apply(lambda x:np.float64(x))
+    else:
+        forecast['yhat'] = forecast['yhat'].apply(lambda x: 0.5 * np.round(x/0.5))
+        forecast['yhat'] = forecast['yhat'].apply(lambda x:np.float64(x))
         
 # Sub título
+    st.markdown('---')
     st.subheader('Dados Previstos')
 # Dados Previstos
-    st.write(forecast['yhat'].tail())
-# Título
-    st.subheader('Previsão de {} para o {}'.format(list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
-             indice_selecionado))
-# plot
-    grafico2 = plot_plotly(model,forecast)            
-    grafico2.update_traces(marker=dict(size=5,
-                                       line=dict(width=2,
-                                                 color='DarkSlateGrey')),
-                  selector=dict(mode='markers'))
-    st.plotly_chart(grafico2)
-
+    new_forecast = forecast.set_index('ds', drop=True)
+    new_df_treino = df_treino.set_index('ds', drop=True)
+    comparacao_real_previsao = pd.concat([new_df_treino.loc[data_inicio:data_fim,'y'],
+                                          new_forecast.loc[data_inicio:data_fim,'yhat']], axis=1)
+    comparacao_real_previsao = comparacao_real_previsao.rename(columns={'y':'Valor Real',
+                                                                'yhat': 'Valor Previsto'})
+    comparacao_real_previsao['Error'] = np.abs(comparacao_real_previsao['Valor Real']-comparacao_real_previsao['Valor Previsto'])
+    c1,c2,c3 = st.beta_columns((0.5,1,0.5))
+    c1.text("")
+    st.markdown('---')
+    c2.write(comparacao_real_previsao.tail(10))
+    c3.text("")
+# plotando os dados previstos
+    metric_df = forecast.set_index('ds')[['yhat']].join(df_treino.set_index('ds').y).reset_index()
+    metric_df.dropna(inplace=True)
+    R2_score = r2_score(metric_df.y, metric_df.yhat)
+    fig = go.Figure(layout=go.Layout(height=600, width=1800))
+    fig.add_trace(go.Scatter(x = df_treino['ds'],
+                             y = df_treino['y'],
+                             mode='markers',
+                             marker=dict(color='red'),
+                             name='Preço Atual'))
+    fig.add_trace(go.Scatter(x = forecast['ds'],
+                             y = forecast['yhat'],
+                             mode='markers',
+                             marker=dict(color='blue'),
+                             name='Preço Previsto'))
+    fig.update_layout(title='O Modelo Obteve uma Acurácia de {}% para a Previsão do Preço no Timeframe de {} para o {}'.format(np.round(R2_score*100,2),
+                      list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
+                      indice_selecionado),xaxis_rangeslider_visible=True)
+    st.plotly_chart(fig)
+    st.markdown('---')
+        #st.subheader('Previsão de {} para o {}'.format(list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
+         #    indice_selecionado))
+        #grafico2 = plot_plotly(model,forecast, xlabel='Data', ylabel='Previsão')            
+        #grafico2.update_traces(marker=dict(size=5,
+         #                                  line=dict(width=2,
+          #                                 color='DarkSlateGrey')),
+           #                                selector=dict(mode='markers'))
+    
+        #st.plotly_chart(grafico2)
+    
 #datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
 
