@@ -85,10 +85,38 @@ def coletando_preco(ativo, data_0, timeframe, data_1):
     print('A coluna Time foi convertida pata Datetime.')
     return precos   
 
+def futuro_dia(fim_data):
+    dia_acrescentar = 1
+    futuro = fim_data + datetime.timedelta(days=dia_acrescentar)
+    while calendar.day_name[futuro.weekday()] =='Saturday' or calendar.day_name[futuro.weekday()] =='Sunday':
+        dia_acrescentar+=1
+        futuro = data_fim + datetime.timedelta(days=dia_acrescentar)
+    else:
+        return futuro 
+
 # Função para o Expert Advisor
-def expert():
-    codigo = ['WIN', 'WDO']
-    st.selectbox('Qual o código?',codigo)
+def expert(indice_escolhido):
+    codigo = indice_escolhido.split('$')[0]
+    meses_win = ['G','J','M','Q','V','Z']
+    meses_wdo = ['F', 'G', 'H','J','K','M','N,","Q','U','V','X','Z']
+    c1,c2,c3 = st.beta_columns((1,1,1))
+    c1.subheader('Código Vigente')
+    if codigo == 'WIN':
+        mes_codigo = c1.selectbox('Selecione o código refente ao vencimento', meses_win)
+    else:
+        mes_codigo = c1.selectbox('Selecione o código refente ao vencimento', meses_wdo)
+    ano_contrato = datetime.datetime.now().strftime("%Y")[2:]
+    c1.text(codigo+mes_codigo+ano_contrato)
+    c2.subheader('Número de Contratos')
+    c2.slider('Selecione Quantidade',1,100)
+    c3.subheader('Stop Loss')
+    c3.number_input('Pontos para Stop Loss', value=int(100))
+    c4,c5,c6= st.beta_columns((1,1,1))
+    c4.subheader('Take Profit')
+    c4.number_input('Pontos para Take Profit', value=int(100))
+    c5.subheader('Martingale')
+    martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+    c5.selectbox('Qual tipo de Martingale?',martingale_list)
     st.button('Voltar para o Painel Principal', key='back_again')
 
 # Abrindo o terminal do MetaTrader 5
@@ -101,7 +129,7 @@ utc_timezone = pytz.timezone('Etc/UTC')
 st.set_page_config(layout="wide")
 
 # Define o título do Dashboard
-image = Image.open(r'C:\Users\eng2\Desktop\bot-mini-indice\BOT_Mini_Indice\logo\LOGO 01-03.png')
+image = Image.open(r'C:\Users\titov\Desktop\bot-mini-indice\BOT_Mini_Indice\logo\LOGO 01-03.png')
 image = image.resize((200, 200), Image.ANTIALIAS)
 st.markdown('---')
 c1,c2,c3 = st.beta_columns((1,1,1))
@@ -111,7 +139,7 @@ c2.subheader("Autor: Vinícius B. Paiva ([LinkedIn](https://www.linkedin.com/in/
 
 # Definindo o código dos índices (Provisório)
 st.sidebar.markdown('# Propriedades do APP')
-indices = ('WDO$','WIN$')
+indices = ('WIN$','WDO$')
 
 # Definindo qual Índice usaremos por vez
 indice_selecionado = st.sidebar.selectbox('Qual será o ativo?', indices)
@@ -138,7 +166,7 @@ hora_fim = st.sidebar.time_input('Horário final para coleta dos dados',
 data_inicio = st.sidebar.date_input('Data inicial para coleta dos dados',
                                datetime.date(2021, 5, 1))
 data_fim = st.sidebar.date_input('Data final para coleta dos dados',
-                               datetime.date(2021, 6, 1))
+                               datetime.date(2021, 6, 4))
 
 # Data de início e fim
 dias_inicio = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_inicio), end=datetime.datetime.combine(data_fim,hora_inicio),tz=utc_timezone)
@@ -172,7 +200,7 @@ col5.subheader('Parâmetros do Expert Advisor (Robô)')
 expert_advisor = col5.button('Click Aqui para Configurar o EA')
 st.markdown('---')
 if expert_advisor:
-    expert()
+    expert(indice_selecionado)
     st.markdown('---')
 else:
     # Executa a função plot 
@@ -193,21 +221,22 @@ df_treino = df_treino.rename(columns={'time':'ds', 'close':'y'})
 model = Prophet(changepoint_prior_scale=0.15,yearly_seasonality=True,daily_seasonality=True)
 
 # Condicional para treinamento do modelo
-treinar = (False,True)
+treinar = ('Não','Sim')
 treinar_modelo = st.sidebar.selectbox("Treinar o modelo?",treinar)
 
-# Treinando o modelo
-if treinar_modelo == True:
+# Opção de treinar o modelo
+if treinar_modelo == 'Sim':
 # Prepara as datas futuras para as previsões
-    dia_futuro = data_fim + datetime.timedelta(days=1)
+    dia_futuro = futuro_dia(data_fim)
     dia_futuro_inicio = datetime.datetime.combine(dia_futuro,hora_inicio)
     dia_futuro_fim = datetime.datetime.combine(dia_futuro,hora_fim)
     dia_futuro_range = pd.date_range(start = dia_futuro_inicio, end= dia_futuro_fim, freq=list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])])
     dia_futuro_range.names = ['ds']
     dia_futuro_range = dia_futuro_range.to_frame()
     dia_futuro_range.index = [i for i in np.arange(0,len(dia_futuro_range))]
-
     futuro = pd.concat([df_treino['ds'].to_frame(),dia_futuro_range]).reset_index(drop=True)
+    
+# Treinando o modelo
     fit_model = model.fit(df_treino)    
     mensagem_treinamento.text('Modelo treinado!')
     
@@ -230,12 +259,14 @@ if treinar_modelo == True:
                                           new_forecast.loc[data_inicio:data_fim,'yhat']], axis=1)
     comparacao_real_previsao = comparacao_real_previsao.rename(columns={'y':'Valor Real',
                                                                 'yhat': 'Valor Previsto'})
+    comparacao_real_previsao[['Valor Real', 'Valor Previsto']] = comparacao_real_previsao[['Valor Real', 'Valor Previsto']].apply(lambda x: np.round(x,2))
     comparacao_real_previsao['Error'] = np.abs(comparacao_real_previsao['Valor Real']-comparacao_real_previsao['Valor Previsto'])
     c1,c2,c3 = st.beta_columns((0.5,1,0.5))
     c1.text("")
     st.markdown('---')
     c2.write(comparacao_real_previsao.tail(10))
     c3.text("")
+    analise_futuro = comparacao_real_previsao.to_csv('comparacao_real_previsto.csv')
 # plotando os dados previstos
     metric_df = forecast.set_index('ds')[['yhat']].join(df_treino.set_index('ds').y).reset_index()
     metric_df.dropna(inplace=True)
@@ -256,15 +287,11 @@ if treinar_modelo == True:
                       indice_selecionado),xaxis_rangeslider_visible=True)
     st.plotly_chart(fig)
     st.markdown('---')
-        #st.subheader('Previsão de {} para o {}'.format(list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
-         #    indice_selecionado))
-        #grafico2 = plot_plotly(model,forecast, xlabel='Data', ylabel='Previsão')            
-        #grafico2.update_traces(marker=dict(size=5,
-         #                                  line=dict(width=2,
-          #                                 color='DarkSlateGrey')),
-           #                                selector=dict(mode='markers'))
-    
-        #st.plotly_chart(grafico2)
+    st.subheader('Previsão de {} para o {}'.format(list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
+                 indice_selecionado))
+    grafico2 = plot_plotly(model,forecast, xlabel='Data', ylabel='Previsão')            
+    grafico2.update_traces(marker=dict(size=5,line=dict(width=2,color='DarkSlateGrey')),selector=dict(mode='markers'))
+    st.plotly_chart(grafico2)
     
 #datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
 
