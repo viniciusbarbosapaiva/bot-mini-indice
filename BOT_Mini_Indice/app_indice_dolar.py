@@ -129,7 +129,7 @@ utc_timezone = pytz.timezone('Etc/UTC')
 st.set_page_config(layout="wide")
 
 # Define o título do Dashboard
-image = Image.open(r'C:\Users\titov\Desktop\bot-mini-indice\BOT_Mini_Indice\logo\LOGO 01-03.png')
+image = Image.open(r'C:\Users\eng2\Desktop\bot-mini-indice\BOT_Mini_Indice\logo\LOGO 01-03.png')
 image = image.resize((200, 200), Image.ANTIALIAS)
 st.markdown('---')
 c1,c2,c3 = st.beta_columns((1,1,1))
@@ -198,6 +198,15 @@ col4.subheader('Visualização dos Primeiros Cinco Dias do Mês {}.'.format(data
 col4.write(dados[['time','close']].head())
 col5.subheader('Parâmetros do Expert Advisor (Robô)')
 expert_advisor = col5.button('Click Aqui para Configurar o EA')
+symbol_info = mt.symbol_info(indice_selecionado)  
+account_info_string = mt.account_info()  
+col5.text('Código: {}'.format(symbol_info.description))
+col5.text('Path: {}'.format(symbol_info.path))
+col5.text('Moeda: {}'.format(account_info_string.currency))
+col5.text('Valor Conta: R${}'.format(account_info_string.balance ))
+col5.text('Capital: R${}'.format(account_info_string.equity))   
+col5.text('Margem: R${}'.format(account_info_string.margin))  
+col5.text('Lucro: R${}'.format(account_info_string.profit ))  
 st.markdown('---')
 if expert_advisor:
     expert(indice_selecionado)
@@ -295,3 +304,12 @@ if treinar_modelo == 'Sim':
     
 #datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
 
+
+    
+    
+    
+    
+    
+    
+    
+    
