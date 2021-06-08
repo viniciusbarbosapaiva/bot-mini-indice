@@ -129,7 +129,7 @@ utc_timezone = pytz.timezone('Etc/UTC')
 st.set_page_config(layout="wide")
 
 # Define o título do Dashboard
-image = Image.open(r'C:\Users\eng2\Desktop\bot-mini-indice\BOT_Mini_Indice\logo\LOGO 01-03.png')
+image = Image.open(r'LOGO 01-03.png')
 image = image.resize((200, 200), Image.ANTIALIAS)
 st.markdown('---')
 c1,c2,c3 = st.beta_columns((1,1,1))
@@ -164,9 +164,9 @@ hora_fim = st.sidebar.time_input('Horário final para coleta dos dados',
 
 # Definindo as datas de início e fim
 data_inicio = st.sidebar.date_input('Data inicial para coleta dos dados',
-                               datetime.date(2021, 5, 1))
+                               datetime.date(2021, 1, 1))
 data_fim = st.sidebar.date_input('Data final para coleta dos dados',
-                               datetime.date(2021, 6, 4))
+                               datetime.date(2021, 6, 7))
 
 # Data de início e fim
 dias_inicio = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_inicio), end=datetime.datetime.combine(data_fim,hora_inicio),tz=utc_timezone)
@@ -303,13 +303,45 @@ if treinar_modelo == 'Sim':
     st.plotly_chart(grafico2)
     
 #datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
+#type(dia_futuro_range['ds'][len(dia_futuro_range)-1].to_pydatetime().time())
+#dia_futuro_range[dia_futuro_range['ds']=='11:30:00']
+#rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],dia_futuro_range['ds'][index_01].to_pydatetime(),1)
+
+index_01 = 0
+index_02 = 1
+
+condicional = True
+while condicional:
+    tick = mt.symbol_info_tick(indice_selecionado)
+    date = datetime.datetime.fromtimestamp(tick.time,tz=utc_timezone)
+    if date.time() > dia_futuro_range['ds'][index_01].to_pydatetime().time() and date.time() < dia_futuro_range['ds'][index_02].to_pydatetime().time():
+        print('Valeu', dia_futuro_range['ds'][index_01],date.time() ,dia_futuro_range['ds'][index_02])
+        rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],dia_futuro_range['ds'][index_01].to_pydatetime(),1)
+        print(datetime.datetime.fromtimestamp(rates['time'],tz=utc_timezone ),rates['close'])
+        break
+        
+    else:    
+        print('Não valeu')
+        condicional = False
+    index_01 += 1
+    index_02 += 1
+    condicional = True
+    
+   
+  
+    
 
 
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
+  
     
