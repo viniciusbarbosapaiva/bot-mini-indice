@@ -118,7 +118,7 @@ def expert(indice_escolhido):
     martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
     c5.selectbox('Qual tipo de Martingale?',martingale_list)
     st.button('Voltar para o Painel Principal', key='back_again')
-
+    
 # Abrindo o terminal do MetaTrader 5
 login_verication()
 
@@ -300,36 +300,201 @@ if treinar_modelo == 'Sim':
                  indice_selecionado))
     grafico2 = plot_plotly(model,forecast, xlabel='Data', ylabel='Previsão')            
     grafico2.update_traces(marker=dict(size=5,line=dict(width=2,color='DarkSlateGrey')),selector=dict(mode='markers'))
+    
+    # Analysing the first rule
+    index_first = [i for i in np.arange(0,len(analise_futuro)) if analise_futuro['ds'][i].time() == datetime.time(9,00) or analise_futuro['ds'][i].time() == datetime.time(17,00)]
+    first = analise_futuro.iloc[index_first,]
+    
     st.plotly_chart(grafico2)
     
+# Definindo função para enviar ordem
+def position_open(symbol, order_type,volume,price,sl,tp,comment):
+    if order_type != mt.ORDER_TYPE_BUY and order_type != mt.ORDER_TYPE_SELL:
+        print(mt.TRADE_RETCODE_INVALID)
+        print('Ordem Inválida')
+        return(False)
+    else:
+        deviation = 50
+        request = {
+                "action": mt.TRADE_ACTION_DEAL,
+                "symbol": symbol,
+                "volume": volume,
+                    "type": order_type,
+                    "price": price,
+                    "sl": sl,
+                    "tp": tp,
+                    "deviation": deviation,
+                    "magic": 234000,
+                    "comment": "python script open",
+                    "type_time": mt.ORDER_TIME_GTC,
+                    "type_filling": mt.ORDER_FILLING_RETURN,
+                    }   
+        result= mt.order_send(request)
+        return result
+        
+
+s = symbol_info.description
+indice = s[s.find('(')+1:s.find(')')]
+select = mt.symbol_select(indice,True)
+point = mt.symbol_info(indice).point
+price_buy = mt.symbol_info_tick(indice).ask
+SL = 100
+TP = 100
+VOLUME = 1      
+bsl = price_buy - SL * point
+btp = price_buy + TP * point
+deviation = 50
+request = {
+        "action": mt.TRADE_ACTION_DEAL,
+        "symbol": indice,
+        "volume": VOLUME,
+        "type": mt.ORDER_TYPE_BUY,
+        "price": price_buy,
+        "sl": bsl,
+        "tp": btp,
+        "deviation": deviation,
+        "magic": 234000,
+        "comment": "python script open",
+        "type_time": mt.ORDER_TIME_GTC,
+        "type_filling": mt.ORDER_FILLING_RETURN,
+        }   
+result= mt.order_send(request)
+
+position_open(indice,mt.ORDER_TYPE_BUY,VOLUME,price_buy,bsl,btp,'EA Test')
+
+def buy(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
+    
+    # Checando volume
+    if volume <= 0:
+        print(mt.TRADE_RETCODE_INVALID_VOLUME)
+        return(False)
+    if price==0:
+        price=symbol_info.ask
+    else:
+        return position_open(symbol,mt.ORDER_TYPE_BUY,volume,price,sl,
+                             tp,comment)
+        
+def sell(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
+    # Checando volume
+    if volume <= 0:
+        print(mt.TRADE_RETCODE_INVALID_VOLUME)
+        return(False)
+    if price==0:
+        price=symbol_info.bid
+    else:
+        return position_open(symbol,mt.ORDER_TYPE_SELL,volume,price,sl,
+                             tp,comment)
+
+def open_orders(symbol):
+    position = mt.positions_get(symbol)
+    if position == None or position==0:
+        print('Não há nenhuma posição aberta para o {}'.format(symbol))
+        return 0
+    elif len(position)>0:
+        print('Há no total {} posição aberta no {}'.format(len(position),symbol))
+        return len(position)
+    
+def order_entry(direcao, lot,stop_loss,take_profit):
+    s = symbol_info.description
+    indice = s[s.find('(')+1:s.find(')')]
+    select = mt.symbol_select(indice,True)
+    point = mt.symbol_info(indice).point
+    
+    if not select:
+        print('O ativo {} não existe. Verificar se o código está correto. Coódigo do error = {}'.format(ativo, mt.last_error()))
+    
+    if direcao == 0 and open_orders(indice) < 1 :
+        price_buy = mt.symbol_info_tick(indice).ask
+        if SL > 0:
+            bsl = price_buy - SL * point
+        else: bsl=0
+        
+        if TP > 0:
+            btp = price_buy + TP * point
+        else: btp=0
+       
+        position_open(indice,mt.ORDER_TYPE_BUY,VOLUME,price_buy,bsl,
+                             btp,'EA Teste')
+        buy(VOLUME,indice,price_buy,bsl,btp,'EA Teste')
+        
+  
+order_entry(0,VOLUME,SL,TP)    
+
+# exibimos dados sobre o pacote MetaTrader5
+print("MetaTrader5 package author: ", mt.__author__)
+print("MetaTrader5 package version: ", mt.__version__)
+ 
+# estabelecemos a conexão ao MetaTrader 5
+if not mt.initialize():
+    print("initialize() failed, error code =",mt.last_error())
+    quit()
+
+
+symbol = 'ITUB4'
+symbol_info = mt.symbol_info(symbol)
+if symbol_info is None:
+    print(symbol, "not found, can not call order_check()")
+    mt.shutdown()
+    quit()
+ 
+# se o símbolo não estiver disponível no MarketWatch, adicionamo-lo
+if not symbol_info.visible:
+    print(symbol, "is not visible, trying to switch on")
+    if not mt.symbol_select(symbol,True):
+        print("symbol_select({}}) failed, exit",symbol)
+        mt.shutdown()
+        quit()
+
+lot = 100
+point = mt.symbol_info(symbol).point
+price = mt.symbol_info_tick(symbol).ask
+deviation = 1
+request = {
+    "action": mt.TRADE_ACTION_DEAL,
+    "symbol": symbol,
+    "volume": lot,
+    "type": mt.ORDER_TYPE_BUY,
+    "price": price,
+    "sl": price - 100 * point,
+    "tp": price + 100 * point,
+    "deviation": deviation,
+    "magic": 123456,
+    "comment": "python script open",
+    "type_time": mt.ORDER_TIME_DAY,
+    "type_filling": mt.ORDER_FILLING_RETURN,
+}
+result = mt.order_send(request)
+
+# verificamos o resultado da execução
+print("1. order_send(): by {} {} lots at {} with deviation={} points".format(symbol,lot,price,deviation));
+
+
 #datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
 #type(dia_futuro_range['ds'][len(dia_futuro_range)-1].to_pydatetime().time())
 #dia_futuro_range[dia_futuro_range['ds']=='11:30:00']
 #rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],dia_futuro_range['ds'][index_01].to_pydatetime(),1)
 
-index_01 = 0
-index_02 = 1
+#index_01 = 0
+#index_02 = 1
 
-condicional = True
-while condicional:
-    tick = mt.symbol_info_tick(indice_selecionado)
-    date = datetime.datetime.fromtimestamp(tick.time,tz=utc_timezone)
-    if date.time() > dia_futuro_range['ds'][index_01].to_pydatetime().time() and date.time() < dia_futuro_range['ds'][index_02].to_pydatetime().time():
-        print('Valeu', dia_futuro_range['ds'][index_01],date.time() ,dia_futuro_range['ds'][index_02])
-        rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],dia_futuro_range['ds'][index_01].to_pydatetime(),1)
-        print(datetime.datetime.fromtimestamp(rates['time'],tz=utc_timezone ),rates['close'])
-        break
+#condicional = True
+#while condicional:
+   # tick = mt.symbol_info_tick(indice_selecionado)
+    #date = datetime.datetime.fromtimestamp(tick.time,tz=utc_timezone)
+    #if date.time() > dia_futuro_range['ds'][index_01].to_pydatetime().time() and date.time() < dia_futuro_range['ds'][index_02].to_pydatetime().time():
+    #    print('Valeu', dia_futuro_range['ds'][index_01],date.time() ,dia_futuro_range['ds'][index_02])
+    #    rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],dia_futuro_range['ds'][index_01].to_pydatetime(),1)
+    #    print(datetime.datetime.fromtimestamp(rates['time'],tz=utc_timezone ),rates['close'])
+    #    break
         
-    else:    
-        print('Não valeu')
-        condicional = False
-    index_01 += 1
-    index_02 += 1
-    condicional = True
+    #else:    
+    #    print('Não valeu')
+    #    condicional = False
+    #index_01 += 1
+    #index_02 += 1
+    #condicional = True
     
-   
-  
-    
+
 
 
 
