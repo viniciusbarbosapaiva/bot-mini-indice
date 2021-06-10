@@ -119,6 +119,39 @@ def expert(indice_escolhido):
     c5.selectbox('Qual tipo de Martingale?',martingale_list)
     st.button('Voltar para o Painel Principal', key='back_again')
     
+def inicio_fim_dia(dataframe):
+        new_data = pd.DataFrame() 
+        dataframe_1 = dataframe.copy()
+        dataframe_1['ds'] = pd.to_datetime(dataframe_1['ds'], unit='s')
+        print(dataframe_1['ds'])
+        dataframe_new = dataframe_1
+        dataframe_1 = dataframe_1.set_index('ds', drop=True)
+        dataframe_new['date'] = dataframe_new['ds'].apply(lambda x: x.date())
+    
+        dates = dataframe_new['date'].unique()
+    
+        for i in np.arange(0,len(dates)):
+            inicio = dataframe_1.loc[dataframe_1.loc[dates[i].strftime("%Y-%m-%d"),].index[0]]
+            inicio = pd.DataFrame(inicio)
+            print(inicio)
+            inicio = inicio.pivot_table(columns=['y'])
+            new_data = pd.DataFrame.append(new_data,inicio)
+            fim = dataframe_1.loc[dataframe_1.loc[dates[i].strftime("%Y-%m-%d"),].index[-1]]
+            fim = pd.DataFrame(fim)
+            print(fim)
+            fim = fim.pivot_table(columns=['y'])
+            new_data = pd.DataFrame.append(new_data,fim)
+        return new_data
+    
+# Função para plotagem final
+def autolabel(rects,ax): #autolabel
+    for rect in rects:
+        height = rect.get_height()
+        ax.annotate('{}'.format(height),
+                    xy = (rect.get_x() + rect.get_width()/2, height),
+                    xytext= (0,3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=15)
 # Abrindo o terminal do MetaTrader 5
 login_verication()
 
@@ -260,7 +293,7 @@ if treinar_modelo == 'Sim':
         
 # Sub título
     st.markdown('---')
-    st.subheader('Dados Previstos')
+    st.subheader('Resultado do Modelo')
 # Dados Previstos
     new_forecast = forecast.set_index('ds', drop=True)
     new_df_treino = df_treino.set_index('ds', drop=True)
@@ -270,42 +303,152 @@ if treinar_modelo == 'Sim':
                                                                 'yhat': 'Valor Previsto'})
     comparacao_real_previsao[['Valor Real', 'Valor Previsto']] = comparacao_real_previsao[['Valor Real', 'Valor Previsto']].apply(lambda x: np.round(x,2))
     comparacao_real_previsao['Error'] = np.abs(comparacao_real_previsao['Valor Real']-comparacao_real_previsao['Valor Previsto'])
-    c1,c2,c3 = st.beta_columns((0.5,1,0.5))
-    c1.text("")
+    
+    c1,c2,c3 = st.beta_columns((1,1,1))
+    c1.subheader('Tabela com as Previsões para o {}'.format(indice_selecionado))
+    c1.write(comparacao_real_previsao.tail(10))
     st.markdown('---')
-    c2.write(comparacao_real_previsao.tail(10))
-    c3.text("")
+    
     analise_futuro = comparacao_real_previsao.to_csv('comparacao_real_previsto.csv')
 # plotando os dados previstos
     metric_df = forecast.set_index('ds')[['yhat']].join(df_treino.set_index('ds').y).reset_index()
     metric_df.dropna(inplace=True)
     R2_score = r2_score(metric_df.y, metric_df.yhat)
+    
     fig = go.Figure(layout=go.Layout(height=600, width=1800))
+    
     fig.add_trace(go.Scatter(x = df_treino['ds'],
                              y = df_treino['y'],
                              mode='markers',
-                             marker=dict(color='red'),
-                             name='Preço Atual'))
+                             marker=dict(color='black'),
+                             name='Preço Atual'))  
+    
+    df_inicio_fim_dia = inicio_fim_dia(df_treino)
+    abertura = df_inicio_fim_dia.loc[::2,]
+    #fig.add_trace(go.Scatter(x = abertura.index,
+                             #y = abertura['y'],
+                             #mode='markers',
+                             #marker=dict(color='yellow'),
+                             #name='Preço de Abertura Atual')) 
+    
+    fechamento = df_inicio_fim_dia.loc['2021-01-04 17:00:00'::2,]
+    #fig.add_trace(go.Scatter(x = fechamento.index,
+     #                        y = fechamento['y'],
+      #                       mode='markers',
+       #                      marker=dict(color='LightSkyBlue'),
+        #                     name='Preço de Fechamento Atual')) 
+    
     fig.add_trace(go.Scatter(x = forecast['ds'],
                              y = forecast['yhat'],
                              mode='markers',
                              marker=dict(color='blue'),
                              name='Preço Previsto'))
+    
+    forecast_new = forecast.loc[:,['ds', 'yhat']]
+    forecast_new = forecast_new.reset_index(drop=True)
+    forecast_new = forecast_new.rename(columns={'yhat':'y'})
+    df_inicio_fim_dia_forecast = inicio_fim_dia(forecast_new)
+    df_inicio_fim_dia_forecast = df_inicio_fim_dia_forecast.reset_index()
+    df_inicio_fim_dia_forecast = df_inicio_fim_dia_forecast.rename(columns={'index':'date'})
+    
+    abertura_forecast = df_inicio_fim_dia_forecast.loc[::2,]
+    abertura_forecast = abertura_forecast.reset_index(drop=True)
+    fig.add_trace(go.Scatter(x = abertura_forecast['date'],
+                             y = abertura_forecast['y'],
+                             mode='markers',
+                             marker=dict(color='green'),
+                             name='Preço de Abertura Previsto'))
+    
+    fechamento_forecast = df_inicio_fim_dia_forecast.loc[1::2,]
+    fechamento_forecast = fechamento_forecast.reset_index(drop=True)
+    fig.add_trace(go.Scatter(x = fechamento_forecast['date'],
+                             y = fechamento_forecast['y'],
+                             mode='markers',
+                             marker=dict(color='red'),
+                             name='Preço de Fechamento Previsto'))
+    
     fig.update_layout(title='O Modelo Obteve uma Acurácia de {}% para a Previsão do Preço no Timeframe de {} para o {}'.format(np.round(R2_score*100,2),
                       list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
                       indice_selecionado),xaxis_rangeslider_visible=True)
+    
     st.plotly_chart(fig)
+    
     st.markdown('---')
+    
     st.subheader('Previsão de {} para o {}'.format(list(timeframes.keys())[list(timeframes.values()).index(timeframes[timeframe_selecionado])],
                  indice_selecionado))
+    
     grafico2 = plot_plotly(model,forecast, xlabel='Data', ylabel='Previsão')            
     grafico2.update_traces(marker=dict(size=5,line=dict(width=2,color='DarkSlateGrey')),selector=dict(mode='markers'))
     
-    # Analysing the first rule
-    index_first = [i for i in np.arange(0,len(analise_futuro)) if analise_futuro['ds'][i].time() == datetime.time(9,00) or analise_futuro['ds'][i].time() == datetime.time(17,00)]
-    first = analise_futuro.iloc[index_first,]
-    
     st.plotly_chart(grafico2)
+    
+    # Creating correlation among Valor real and Valor Previsto columns
+    d = 0
+    d_1 = 1
+    length = len(df_inicio_fim_dia)
+    real_diferenca = np.array([])
+    previsto_diferenca = np.array([])
+    df_inicio_fim_dia = df_inicio_fim_dia.reset_index()
+    
+    while d_1 <= length:
+        diferenca_real = df_inicio_fim_dia.iloc[d,1] - df_inicio_fim_dia.iloc[d_1,1]
+        diferenca_previsto = df_inicio_fim_dia_forecast.iloc[d,1] - df_inicio_fim_dia_forecast.iloc[d_1,1]
+        
+        real_diferenca = np.append(real_diferenca,diferenca_real)
+        previsto_diferenca = np.append(previsto_diferenca,diferenca_previsto)
+        
+        d+=2
+        d_1+=2
+    print(len(real_diferenca),len(previsto_diferenca)) 
+    
+    real_diferenca = pd.DataFrame(real_diferenca,columns=['Real Diferenca'])
+    previsto_diferenca = pd.DataFrame(previsto_diferenca, columns=['Previsto Diferenca'])
+
+    # The first rule performance
+    first_rule = pd.concat([real_diferenca,previsto_diferenca], axis=1)
+    
+    success_first = np.array([])
+    for real,previsto in zip(first_rule['Real Diferenca'],first_rule['Previsto Diferenca']):
+    
+        if real > 0 and previsto > 0:
+            success_first = np.append(success_first,True)
+        elif real < 0 and previsto < 0:
+            success_first = np.append(success_first,True)
+        else:
+            success_first = np.append(success_first,False)   
+    
+    # Creating gain column
+    first_rule['gain'] = success_first
+    
+    # Analysing performance
+    gain = (len(first_rule[first_rule['gain'] == True]['gain'])/len(first_rule))*100
+    gain = np.round(gain,2)
+    loss = (len(first_rule[first_rule['gain'] == False]['gain'])/len(first_rule))*100
+    loss = np.round(loss,2)
+    print('A segunda estratégia obteve {:.2f}% de gain'.format(gain))
+    print('A segunda estratégia obteve {:.2f}% de loss'.format(loss))
+    
+    pontos_ganhos = np.sum(np.abs(first_rule[first_rule['gain'] == True]['Real Diferenca']))
+    pontos_perdidos = np.sum(np.abs(first_rule[first_rule['gain'] == False]['Real Diferenca']))
+    ponto_total = np.sum(np.abs(first_rule['Real Diferenca']))
+    
+    # Conclusão
+    c2.subheader("Conclusão para {}".format(indice_selecionado))
+    c2.markdown("Entre os dias {} e {}, o modelo acertou a tendência {}% e errou {}%. Conforme previsão da tendência realizada pelo modelo, a estratégia era abrir uma operação às {} e encerrar às {} apostando que o mercado seguiria conforme previsto. O resultado final foi que executando esta estratégia obtemos um total de {} pontos ganhos e {} pontos perdidos.".format(data_inicio,data_fim,gain,loss,hora_inicio,hora_fim,pontos_ganhos,pontos_perdidos))
+    
+    with c3:
+        st.subheader('Quantidades de Pontos Ganhos e Perdidos no {}'.format(indice_selecionado))
+        x = ['Pontos Ganhos','Pontos Perdidos']
+        y = [pontos_ganhos, pontos_perdidos]
+        fig = go.Figure(data=[go.Bar(
+            x=x, y=y,
+            text=y,
+            textposition='auto',
+                )])
+        #fig.update_layout(title='Quantidades de Pontos Ganhos e Perdidos')
+
+        st.plotly_chart(fig)
     
 # Definindo função para enviar ordem
 def position_open(symbol, order_type,volume,price,sl,tp,comment):
