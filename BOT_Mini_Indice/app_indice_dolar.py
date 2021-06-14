@@ -119,6 +119,7 @@ def expert(indice_escolhido):
     c5.selectbox('Qual tipo de Martingale?',martingale_list)
     st.button('Voltar para o Painel Principal', key='back_again')
     
+    
 def inicio_fim_dia(dataframe):
         new_data = pd.DataFrame() 
         dataframe_1 = dataframe.copy()
@@ -152,6 +153,7 @@ def autolabel(rects,ax): #autolabel
                     xytext= (0,3),
                     textcoords="offset points",
                     ha='center', va='bottom', fontsize=15)
+        
 # Abrindo o terminal do MetaTrader 5
 login_verication()
 
@@ -229,8 +231,8 @@ def plot_dados_brutos():
 col4,col5,col6 = st.beta_columns((1,1,1))
 col4.subheader('Visualização dos Primeiros Cinco Dias do Mês {}.'.format(data_inicio.month))
 col4.write(dados[['time','close']].head())
-col5.subheader('Parâmetros do Expert Advisor (Robô)')
-expert_advisor = col5.button('Click Aqui para Configurar o EA')
+col5.subheader('Parâmetros da Conta')
+#expert_advisor = col5.button('Click Aqui para Configurar o EA')
 symbol_info = mt.symbol_info(indice_selecionado)  
 account_info_string = mt.account_info()  
 col5.text('Código: {}'.format(symbol_info.description))
@@ -241,13 +243,13 @@ col5.text('Capital: R${}'.format(account_info_string.equity))
 col5.text('Margem: R${}'.format(account_info_string.margin))  
 col5.text('Lucro: R${}'.format(account_info_string.profit ))  
 st.markdown('---')
-if expert_advisor:
-    expert(indice_selecionado)
-    st.markdown('---')
-else:
+#if expert_advisor:
+ #   expert(indice_selecionado)
+  #  st.markdown('---')
+#else:
     # Executa a função plot 
-    plot_dados_brutos()
-    st.markdown('---')
+ #   plot_dados_brutos()
+  #  st.markdown('---')
 col6.subheader('Visualização dos Últimos Cinco Dias do Mês {}.'.format(data_fim.month))
 col6.write(dados[['time','close']].tail()) 
     
@@ -449,7 +451,71 @@ if treinar_modelo == 'Sim':
         #fig.update_layout(title='Quantidades de Pontos Ganhos e Perdidos')
 
         st.plotly_chart(fig)
-    
+        
+        # Definindo parâmetros para o robô
+    robo = ('Não','Sim')
+    ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
+    if ativar_robo == 'Sim':
+        st.subheader('Parâmetros para o EA (Robô)')
+        codigo = indice_selecionado.split('$')[0]
+        c_1,c_2,c_3 = st.beta_columns((1,1,1))
+        c_1.subheader('Código Vigente')
+        if codigo == 'WIN':
+            s = symbol_info.description
+            indice = s[s.find('(')+1:s.find(')')]
+            symbol_info2 = mt.symbol_info(indice)
+            c_1.text(indice)
+            c_2.subheader('Número de Contratos')
+            volume = c_2.slider('Selecione Quantidade',1,100)
+            c_3.subheader('Stop Loss')
+            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(100))
+            c_4,c_5,c_6= st.beta_columns((1,1,1))
+            c_4.subheader('Take Profit')
+            profit = c_4.number_input('Pontos para Take Profit', value=int(100))
+            c_5.subheader('Martingale')
+            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+            enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
+            
+            point = mt.symbol_info(indice).point
+            price_buy = mt.symbol_info_tick(indice).ask
+            SL = stop_loss
+            TP = profit
+            VOLUME = volume      
+            deviation = 5
+            
+            
+        if codigo == 'WDO':
+            s = symbol_info.description
+            indice = s[s.find('(')+1:s.find(')')]
+            symbol_info2 = mt.symbol_info(indice)
+            c_1.text(indice)
+            c_2.subheader('Número de Contratos')
+            volume = c_2.slider('Selecione Quantidade',1,100)
+            c_3.subheader('Stop Loss')
+            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(1000))
+            c_4,c_5,c_6= st.beta_columns((1,1,1))
+            c_4.subheader('Take Profit')
+            profit = c_4.number_input('Pontos para Take Profit', value=int(1000))
+            c_5.subheader('Martingale')
+            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+            enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
+            
+            point = mt.symbol_info(indice).point
+            price_buy = mt.symbol_info_tick(indice).ask
+            SL = stop_loss
+            TP = profit
+            VOLUME = volume      
+            deviation = 5
+
+# Função hora de operar
+def working_hour(start,end):
+    if datetime.datetime.now().time() < start or datetime.datetime.now().time() > end:
+        print('Hora de Fechar posição')
+    else:
+        print('Permanessa assim')
+
 # Definindo função para enviar ordem
 def position_open(symbol, order_type,volume,price,sl,tp,comment):
     if order_type != mt.ORDER_TYPE_BUY and order_type != mt.ORDER_TYPE_SELL:
@@ -457,11 +523,11 @@ def position_open(symbol, order_type,volume,price,sl,tp,comment):
         print('Ordem Inválida')
         return(False)
     else:
-        deviation = 50
+        deviation = 5
         request = {
                 "action": mt.TRADE_ACTION_DEAL,
                 "symbol": symbol,
-                "volume": volume,
+                "volume": float(volume),
                     "type": order_type,
                     "price": price,
                     "sl": sl,
@@ -486,11 +552,11 @@ TP = 100
 VOLUME = 1      
 bsl = price_buy - SL * point
 btp = price_buy + TP * point
-deviation = 50
+deviation = 5
 request = {
         "action": mt.TRADE_ACTION_DEAL,
         "symbol": indice,
-        "volume": VOLUME,
+        "volume": float(VOLUME),
         "type": mt.ORDER_TYPE_BUY,
         "price": price_buy,
         "sl": bsl,
@@ -501,9 +567,9 @@ request = {
         "type_time": mt.ORDER_TIME_GTC,
         "type_filling": mt.ORDER_FILLING_RETURN,
         }   
-result= mt.order_send(request)
+#result= mt.order_send(request)
 
-position_open(indice,mt.ORDER_TYPE_BUY,VOLUME,price_buy,bsl,btp,'EA Test')
+#position_open(indice,mt.ORDER_TYPE_BUY,VOLUME,price_buy,bsl,btp,'EA Test')
 
 def buy(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
     
@@ -514,9 +580,10 @@ def buy(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
     if price==0:
         price=symbol_info.ask
     else:
-        return position_open(symbol,mt.ORDER_TYPE_BUY,volume,price,sl,
+        buy_position = position_open(symbol,mt.ORDER_TYPE_BUY,volume,price,sl,
                              tp,comment)
-        
+        return buy_position
+    
 def sell(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
     # Checando volume
     if volume <= 0:
@@ -525,18 +592,18 @@ def sell(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
     if price==0:
         price=symbol_info.bid
     else:
-        return position_open(symbol,mt.ORDER_TYPE_SELL,volume,price,sl,
+        sell_position = position_open(symbol,mt.ORDER_TYPE_SELL,volume,price,sl,
                              tp,comment)
+        return sell_position
 
 def open_orders(symbol):
-    position = mt.positions_get(symbol)
-    if position == None or position==0:
-        print('Não há nenhuma posição aberta para o {}'.format(symbol))
-        return 0
-    elif len(position)>0:
+    position = mt.positions_get(symbol=symbol)
+    if  len(position)>0:
         print('Há no total {} posição aberta no {}'.format(len(position),symbol))
         return len(position)
-    
+    else:
+        return 0
+
 def order_entry(direcao, lot,stop_loss,take_profit):
     s = symbol_info.description
     indice = s[s.find('(')+1:s.find(')')]
@@ -544,9 +611,9 @@ def order_entry(direcao, lot,stop_loss,take_profit):
     point = mt.symbol_info(indice).point
     
     if not select:
-        print('O ativo {} não existe. Verificar se o código está correto. Coódigo do error = {}'.format(ativo, mt.last_error()))
+        print('O ativo {} não existe. Verificar se o código está correto. Coódigo do error = {}'.format(indice, mt.last_error()))
     
-    if direcao == 0 and open_orders(indice) < 1 :
+    if direcao == 0 and open_orders(indice) ==0 :
         price_buy = mt.symbol_info_tick(indice).ask
         if SL > 0:
             bsl = price_buy - SL * point
@@ -556,60 +623,25 @@ def order_entry(direcao, lot,stop_loss,take_profit):
             btp = price_buy + TP * point
         else: btp=0
        
-        position_open(indice,mt.ORDER_TYPE_BUY,VOLUME,price_buy,bsl,
-                             btp,'EA Teste')
         buy(VOLUME,indice,price_buy,bsl,btp,'EA Teste')
         
+    if direcao == 1 and open_orders(indice) ==0 :
+        price_sell = mt.symbol_info_tick(indice).bid
+        if SL > 0:
+            ssl = price_sell + SL * point
+        else: ssl=0
+        
+        if TP > 0:
+            stp = price_sell - TP * point
+        else: stp=0
+       
+        sell(VOLUME,indice,price_sell,ssl,stp,'EA Teste')
+        
   
-order_entry(0,VOLUME,SL,TP)    
-
-# exibimos dados sobre o pacote MetaTrader5
-print("MetaTrader5 package author: ", mt.__author__)
-print("MetaTrader5 package version: ", mt.__version__)
- 
-# estabelecemos a conexão ao MetaTrader 5
-if not mt.initialize():
-    print("initialize() failed, error code =",mt.last_error())
-    quit()
+#order_entry(0,VOLUME,SL,TP)
+#order_entry(1,VOLUME,SL,TP)      
 
 
-symbol = 'ITUB4'
-symbol_info = mt.symbol_info(symbol)
-if symbol_info is None:
-    print(symbol, "not found, can not call order_check()")
-    mt.shutdown()
-    quit()
- 
-# se o símbolo não estiver disponível no MarketWatch, adicionamo-lo
-if not symbol_info.visible:
-    print(symbol, "is not visible, trying to switch on")
-    if not mt.symbol_select(symbol,True):
-        print("symbol_select({}}) failed, exit",symbol)
-        mt.shutdown()
-        quit()
-
-lot = 100
-point = mt.symbol_info(symbol).point
-price = mt.symbol_info_tick(symbol).ask
-deviation = 1
-request = {
-    "action": mt.TRADE_ACTION_DEAL,
-    "symbol": symbol,
-    "volume": lot,
-    "type": mt.ORDER_TYPE_BUY,
-    "price": price,
-    "sl": price - 100 * point,
-    "tp": price + 100 * point,
-    "deviation": deviation,
-    "magic": 123456,
-    "comment": "python script open",
-    "type_time": mt.ORDER_TIME_DAY,
-    "type_filling": mt.ORDER_FILLING_RETURN,
-}
-result = mt.order_send(request)
-
-# verificamos o resultado da execução
-print("1. order_send(): by {} {} lots at {} with deviation={} points".format(symbol,lot,price,deviation));
 
 
 #datetime.datetime.now().time() - dia_futuro_range[i].to_pydatetime().time()
