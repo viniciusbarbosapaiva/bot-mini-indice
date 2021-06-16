@@ -153,6 +153,154 @@ def autolabel(rects,ax): #autolabel
                     xytext= (0,3),
                     textcoords="offset points",
                     ha='center', va='bottom', fontsize=15)
+
+# Definindo função para enviar ordem
+def position_open(symbol, order_type,volume,price,sl,tp,comment):
+    if order_type != mt.ORDER_TYPE_BUY and order_type != mt.ORDER_TYPE_SELL:
+        print(mt.TRADE_RETCODE_INVALID)
+        print('Ordem Inválida')
+        return(False)
+    else:
+        deviation = 5
+        request = {
+                "action": mt.TRADE_ACTION_DEAL,
+                "symbol": symbol,
+                "volume": float(volume),
+                    "type": order_type,
+                    "price": price,
+                    "sl": sl,
+                    "tp": tp,
+                    "deviation": deviation,
+                    "magic": 234000,
+                    "comment": "python script open",
+                    "type_time": mt.ORDER_TIME_GTC,
+                    "type_filling": mt.ORDER_FILLING_RETURN,
+                    }   
+        result= mt.order_send(request)
+        return result
+
+def buy(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
+    
+    # Checando volume
+    if volume <= 0:
+        print(mt.TRADE_RETCODE_INVALID_VOLUME)
+        return(False)
+    if price==0:
+        price=symbol_info.ask
+    else:
+        buy_position = position_open(symbol,mt.ORDER_TYPE_BUY,volume,price,sl,
+                             tp,comment)
+        return buy_position
+    
+def sell(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
+    # Checando volume
+    if volume <= 0:
+        print(mt.TRADE_RETCODE_INVALID_VOLUME)
+        return(False)
+    if price==0:
+        price=symbol_info.bid
+    else:
+        sell_position = position_open(symbol,mt.ORDER_TYPE_SELL,volume,price,sl,
+                             tp,comment)
+        return sell_position
+
+def open_orders(symbol):
+    position = mt.positions_get(symbol=symbol)
+    if  len(position)>0:
+        print('Há no total {} posição aberta no {}'.format(len(position),symbol))
+        return len(position)
+    else:
+        return 0
+
+def order_entry(direcao, lot,stop_loss,take_profit):
+    s = symbol_info.description
+    indice = s[s.find('(')+1:s.find(')')]
+    select = mt.symbol_select(indice,True)
+    point = mt.symbol_info(indice).point
+    
+    if not select:
+        print('O ativo {} não existe. Verificar se o código está correto. Coódigo do error = {}'.format(indice, mt.last_error()))
+    
+    if direcao == 0 and open_orders(indice) ==0 :
+        price_buy = mt.symbol_info_tick(indice).ask
+        if SL > 0:
+            bsl = price_buy - SL * point
+        else: bsl=0
+        
+        if TP > 0:
+            btp = price_buy + TP * point
+        else: btp=0
+       
+        buy(VOLUME,indice,price_buy,bsl,btp,'EA Teste')
+        
+    if direcao == 1 and open_orders(indice) ==0 :
+        price_sell = mt.symbol_info_tick(indice).bid
+        if SL > 0:
+            ssl = price_sell + SL * point
+        else: ssl=0
+        
+        if TP > 0:
+            stp = price_sell - TP * point
+        else: stp=0
+       
+        sell(VOLUME,indice,price_sell,ssl,stp,'EA Teste')
+        
+def close_all(direcao):
+    s = symbol_info.description
+    indice = s[s.find('(')+1:s.find(')')]
+    deviation=5
+    if open_orders(indice) >=1:
+        position = mt.positions_get(symbol=indice)
+        ticket = position[0][0]
+        volume_position = position[0][9]
+        position_type = position[0][5]
+        
+        if direcao == 0 and position_type==0:
+            price_sell = mt.symbol_info_tick(indice).bid 
+            request={
+                "action": mt.TRADE_ACTION_DEAL,
+                "symbol": indice,
+                "volume": float(volume_position),
+                "type": mt.ORDER_TYPE_SELL,
+                "position": ticket,
+                "price": price_sell,
+                "deviation": deviation,
+                "magic": 234000,
+                "comment": "python script close",
+                "type_time": mt.ORDER_TIME_GTC,
+                "type_filling": mt.ORDER_FILLING_RETURN,
+                }   
+                # enviamos a solicitação de negociação
+            result=mt.order_send(request)
+            
+        
+        elif direcao == 1 and position_type==1:
+            price_buy = mt.symbol_info_tick(indice).ask
+            request={
+                "action": mt.TRADE_ACTION_DEAL,
+                "symbol": indice,
+                "volume": float(volume_position),
+                "type": mt.ORDER_TYPE_BUY,
+                "position": ticket,
+                "price": price_buy,
+                "deviation": deviation,
+                "magic": 234000,
+                "comment": "python script close",
+                "type_time": mt.ORDER_TIME_GTC,
+                "type_filling": mt.ORDER_FILLING_RETURN,
+                }   
+                # enviamos a solicitação de negociação
+            result=mt.order_send(request)
+            
+        
+# Função hora de operar
+def working_hour():
+    if datetime.datetime.now().time() < hora_inicio or datetime.datetime.now().time() > hora_fim:
+        close_all(0)
+        close_all(1)
+        return False
+    else:
+        return True     
         
 # Abrindo o terminal do MetaTrader 5
 login_verication()
@@ -201,7 +349,7 @@ hora_fim = st.sidebar.time_input('Horário final para coleta dos dados',
 data_inicio = st.sidebar.date_input('Data inicial para coleta dos dados',
                                datetime.date(2021, 1, 1))
 data_fim = st.sidebar.date_input('Data final para coleta dos dados',
-                               datetime.date(2021, 6, 7))
+                               datetime.date(2021, 6, 15))
 
 # Data de início e fim
 dias_inicio = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_inicio), end=datetime.datetime.combine(data_fim,hora_inicio),tz=utc_timezone)
@@ -270,7 +418,8 @@ treinar_modelo = st.sidebar.selectbox("Treinar o modelo?",treinar)
 
 # Opção de treinar o modelo
 if treinar_modelo == 'Sim':
-# Prepara as datas futuras para as previsões
+    st.cache()  
+    # Prepara as datas futuras para as previsões
     dia_futuro = futuro_dia(data_fim)
     dia_futuro_inicio = datetime.datetime.combine(dia_futuro,hora_inicio)
     dia_futuro_fim = datetime.datetime.combine(dia_futuro,hora_fim)
@@ -299,8 +448,9 @@ if treinar_modelo == 'Sim':
 # Dados Previstos
     new_forecast = forecast.set_index('ds', drop=True)
     new_df_treino = df_treino.set_index('ds', drop=True)
-    comparacao_real_previsao = pd.concat([new_df_treino.loc[data_inicio:data_fim,'y'],
-                                          new_forecast.loc[data_inicio:data_fim,'yhat']], axis=1)
+    comparacao_real_previsao = pd.concat([new_df_treino.loc[data_inicio:dia_futuro,'y'],
+                                          new_forecast.loc[data_inicio:dia_futuro,'yhat']], axis=1)
+   
     comparacao_real_previsao = comparacao_real_previsao.rename(columns={'y':'Valor Real',
                                                                 'yhat': 'Valor Previsto'})
     comparacao_real_previsao[['Valor Real', 'Valor Previsto']] = comparacao_real_previsao[['Valor Real', 'Valor Previsto']].apply(lambda x: np.round(x,2))
@@ -452,194 +602,134 @@ if treinar_modelo == 'Sim':
 
         st.plotly_chart(fig)
         
-        # Definindo parâmetros para o robô
-    robo = ('Não','Sim')
-    ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
-    if ativar_robo == 'Sim':
-        st.subheader('Parâmetros para o EA (Robô)')
-        codigo = indice_selecionado.split('$')[0]
-        c_1,c_2,c_3 = st.beta_columns((1,1,1))
-        c_1.subheader('Código Vigente')
-        if codigo == 'WIN':
-            s = symbol_info.description
-            indice = s[s.find('(')+1:s.find(')')]
-            symbol_info2 = mt.symbol_info(indice)
-            c_1.text(indice)
-            c_2.subheader('Número de Contratos')
-            volume = c_2.slider('Selecione Quantidade',1,100)
-            c_3.subheader('Stop Loss')
-            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(100))
-            c_4,c_5,c_6= st.beta_columns((1,1,1))
-            c_4.subheader('Take Profit')
-            profit = c_4.number_input('Pontos para Take Profit', value=int(100))
-            c_5.subheader('Martingale')
-            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
-            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
-            enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
+# Definindo parâmetros para o robô
+robo = ('Não','Sim')
+ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
+st.cache()
+if ativar_robo == 'Sim':
+    st.subheader('Parâmetros para o EA (Robô)')
+    codigo = indice_selecionado.split('$')[0]
+    c_1,c_2,c_3 = st.beta_columns((1,1,1))
+    c_1.subheader('Código Vigente')
+    if codigo == 'WIN':
+        s = symbol_info.description
+        indice = s[s.find('(')+1:s.find(')')]
+        c_1.text(indice)
+        c_2.subheader('Número de Contratos')
+        volume = c_2.slider('Selecione Quantidade',1,100)
+        c_3.subheader('Stop Loss')
+        stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(1000))
+        c_4,c_5,c_6= st.beta_columns((1,1,1))
+        c_4.subheader('Take Profit')
+        profit = c_4.number_input('Pontos para Take Profit', value=int(1000))
+        c_5.subheader('Martingale')
+        martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+        c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+        enviar_ordem = c_6.selectbox('Enviar Ordem?',robo)
             
-            point = mt.symbol_info(indice).point
-            price_buy = mt.symbol_info_tick(indice).ask
+        if enviar_ordem == 'Sim':                
             SL = stop_loss
             TP = profit
-            VOLUME = volume      
-            deviation = 5
+            VOLUME = volume  
+            last_day = new_forecast.index[len(new_forecast)-1].date().strftime("%Y-%m-%d")
+            today = new_forecast.loc[last_day, 'yhat']
+
+            while working_hour():
+                rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
+                                           dia_futuro_range['ds'][0].to_pydatetime(),2)
+                pregao_hoje = pd.DataFrame(rates)
+                pregao_hoje['time'] = pd.to_datetime(pregao_hoje['time'], unit='s')
+                print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
+                print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
+                time.sleep(1)
+    
+                if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Sell signal')
+                    time.sleep(1)
+                    order_entry(1,VOLUME,SL,TP)
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 1 and open_orders(indice) >=1 :
+                        print('Tendência de baixa continua')
+                    else:
+                        close_all(1)
+   
+                if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Buy signal')
+                    time.sleep(1)
+                    order_entry(0,VOLUME,SL,TP) 
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 0 and open_orders(indice) >=1 :
+                        print('Tendência de alta continua')
+                        time.sleep(1)
+                    else:
+                        close_all(0)
+                        time.sleep(1)
+                                
             
-            
-        if codigo == 'WDO':
-            s = symbol_info.description
-            indice = s[s.find('(')+1:s.find(')')]
-            symbol_info2 = mt.symbol_info(indice)
-            c_1.text(indice)
-            c_2.subheader('Número de Contratos')
-            volume = c_2.slider('Selecione Quantidade',1,100)
-            c_3.subheader('Stop Loss')
-            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(1000))
-            c_4,c_5,c_6= st.beta_columns((1,1,1))
-            c_4.subheader('Take Profit')
-            profit = c_4.number_input('Pontos para Take Profit', value=int(1000))
-            c_5.subheader('Martingale')
-            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
-            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
-            enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
-            
-            point = mt.symbol_info(indice).point
-            price_buy = mt.symbol_info_tick(indice).ask
+    if codigo == 'WDO':
+        s = symbol_info.description
+        indice = s[s.find('(')+1:s.find(')')]
+        c_1.text(indice)
+        c_2.subheader('Número de Contratos')
+        volume = c_2.slider('Selecione Quantidade',1,100)
+        c_3.subheader('Stop Loss')
+        stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(50000))
+        c_4,c_5,c_6= st.beta_columns((1,1,1))
+        c_4.subheader('Take Profit')
+        profit = c_4.number_input('Pontos para Take Profit', value=int(50000))
+        c_5.subheader('Martingale')
+        martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+        c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+        enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
+        c_6.text('Robô não está ativado')
+        
+        if enviar_ordem == 'Sim':                
             SL = stop_loss
             TP = profit
-            VOLUME = volume      
-            deviation = 5
-
-# Função hora de operar
-def working_hour(start,end):
-    if datetime.datetime.now().time() < start or datetime.datetime.now().time() > end:
-        print('Hora de Fechar posição')
-    else:
-        print('Permanessa assim')
-
-# Definindo função para enviar ordem
-def position_open(symbol, order_type,volume,price,sl,tp,comment):
-    if order_type != mt.ORDER_TYPE_BUY and order_type != mt.ORDER_TYPE_SELL:
-        print(mt.TRADE_RETCODE_INVALID)
-        print('Ordem Inválida')
-        return(False)
-    else:
-        deviation = 5
-        request = {
-                "action": mt.TRADE_ACTION_DEAL,
-                "symbol": symbol,
-                "volume": float(volume),
-                    "type": order_type,
-                    "price": price,
-                    "sl": sl,
-                    "tp": tp,
-                    "deviation": deviation,
-                    "magic": 234000,
-                    "comment": "python script open",
-                    "type_time": mt.ORDER_TIME_GTC,
-                    "type_filling": mt.ORDER_FILLING_RETURN,
-                    }   
-        result= mt.order_send(request)
-        return result
-        
-
-s = symbol_info.description
-indice = s[s.find('(')+1:s.find(')')]
-select = mt.symbol_select(indice,True)
-point = mt.symbol_info(indice).point
-price_buy = mt.symbol_info_tick(indice).ask
-SL = 100
-TP = 100
-VOLUME = 1      
-bsl = price_buy - SL * point
-btp = price_buy + TP * point
-deviation = 5
-request = {
-        "action": mt.TRADE_ACTION_DEAL,
-        "symbol": indice,
-        "volume": float(VOLUME),
-        "type": mt.ORDER_TYPE_BUY,
-        "price": price_buy,
-        "sl": bsl,
-        "tp": btp,
-        "deviation": deviation,
-        "magic": 234000,
-        "comment": "python script open",
-        "type_time": mt.ORDER_TIME_GTC,
-        "type_filling": mt.ORDER_FILLING_RETURN,
-        }   
-#result= mt.order_send(request)
-
-#position_open(indice,mt.ORDER_TYPE_BUY,VOLUME,price_buy,bsl,btp,'EA Test')
-
-def buy(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
+            VOLUME = volume  
+            last_day = new_forecast.index[len(new_forecast)-1].date().strftime("%Y-%m-%d")
+            today = new_forecast.loc[last_day, 'yhat']
+            while working_hour():
+                rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
+                                           dia_futuro_range['ds'][0].to_pydatetime(),2)
+                pregao_hoje = pd.DataFrame(rates)
+                pregao_hoje['time'] = pd.to_datetime(pregao_hoje['time'], unit='s')
+                print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
+                print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
+                time.sleep(1)
     
-    # Checando volume
-    if volume <= 0:
-        print(mt.TRADE_RETCODE_INVALID_VOLUME)
-        return(False)
-    if price==0:
-        price=symbol_info.ask
-    else:
-        buy_position = position_open(symbol,mt.ORDER_TYPE_BUY,volume,price,sl,
-                             tp,comment)
-        return buy_position
-    
-def sell(volume, symbol=None, price=0.0, sl=0.0, tp=0.0,comment=""):
-    # Checando volume
-    if volume <= 0:
-        print(mt.TRADE_RETCODE_INVALID_VOLUME)
-        return(False)
-    if price==0:
-        price=symbol_info.bid
-    else:
-        sell_position = position_open(symbol,mt.ORDER_TYPE_SELL,volume,price,sl,
-                             tp,comment)
-        return sell_position
+                if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Sell signal')
+                    time.sleep(1)
+                    order_entry(1,VOLUME,SL,TP)
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 1 and open_orders(indice) >=1 :
+                        print('Tendência de baixa continua')
+                    else:
+                        close_all(1)
+   
+                if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Buy signal')
+                    time.sleep(1)
+                    order_entry(0,VOLUME,SL,TP) 
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 0 and open_orders(indice) >=1 :
+                        print('Tendência de alta continua')
+                        time.sleep(1)
+                    else:
+                        close_all(0)
+                        time.sleep(1)              
+            
 
-def open_orders(symbol):
-    position = mt.positions_get(symbol=symbol)
-    if  len(position)>0:
-        print('Há no total {} posição aberta no {}'.format(len(position),symbol))
-        return len(position)
-    else:
-        return 0
-
-def order_entry(direcao, lot,stop_loss,take_profit):
-    s = symbol_info.description
-    indice = s[s.find('(')+1:s.find(')')]
-    select = mt.symbol_select(indice,True)
-    point = mt.symbol_info(indice).point
     
-    if not select:
-        print('O ativo {} não existe. Verificar se o código está correto. Coódigo do error = {}'.format(indice, mt.last_error()))
-    
-    if direcao == 0 and open_orders(indice) ==0 :
-        price_buy = mt.symbol_info_tick(indice).ask
-        if SL > 0:
-            bsl = price_buy - SL * point
-        else: bsl=0
-        
-        if TP > 0:
-            btp = price_buy + TP * point
-        else: btp=0
-       
-        buy(VOLUME,indice,price_buy,bsl,btp,'EA Teste')
-        
-    if direcao == 1 and open_orders(indice) ==0 :
-        price_sell = mt.symbol_info_tick(indice).bid
-        if SL > 0:
-            ssl = price_sell + SL * point
-        else: ssl=0
-        
-        if TP > 0:
-            stp = price_sell - TP * point
-        else: stp=0
-       
-        sell(VOLUME,indice,price_sell,ssl,stp,'EA Teste')
-        
-  
 #order_entry(0,VOLUME,SL,TP)
-#order_entry(1,VOLUME,SL,TP)      
+#close_all(0)
+#order_entry(1,VOLUME,SL,TP)  
+#close_all(1)    
 
 
 
@@ -656,6 +746,7 @@ def order_entry(direcao, lot,stop_loss,take_profit):
 #while condicional:
    # tick = mt.symbol_info_tick(indice_selecionado)
     #date = datetime.datetime.fromtimestamp(tick.time,tz=utc_timezone)
+    #print(date.time())
     #if date.time() > dia_futuro_range['ds'][index_01].to_pydatetime().time() and date.time() < dia_futuro_range['ds'][index_02].to_pydatetime().time():
     #    print('Valeu', dia_futuro_range['ds'][index_01],date.time() ,dia_futuro_range['ds'][index_02])
     #    rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],dia_futuro_range['ds'][index_01].to_pydatetime(),1)
@@ -668,9 +759,6 @@ def order_entry(direcao, lot,stop_loss,take_profit):
     #index_01 += 1
     #index_02 += 1
     #condicional = True
-    
-
-
 
 
 
