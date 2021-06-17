@@ -301,6 +301,21 @@ def working_hour():
         return False
     else:
         return True     
+
+# Calculando PRofit
+def calc_profit():
+    global today
+    global indice
+    date_from = today.index[0].date()
+    date_to = datetime.datetime.now()
+    deals = mt.history_deals_get(date_from, date_to, group=indice )
+    if deals == None:
+        profit = 0
+        return profit
+    else:
+        deals = pd.DataFrame(list(deals),columns=deals[0]._asdict().keys())
+        profit = np.sum(deals['profit'])
+        return profit
         
 # Abrindo o terminal do MetaTrader 5
 login_verication()
@@ -349,7 +364,7 @@ hora_fim = st.sidebar.time_input('Horário final para coleta dos dados',
 data_inicio = st.sidebar.date_input('Data inicial para coleta dos dados',
                                datetime.date(2021, 1, 1))
 data_fim = st.sidebar.date_input('Data final para coleta dos dados',
-                               datetime.date(2021, 6, 15))
+                               datetime.date(2021, 6, 16))
 
 # Data de início e fim
 dias_inicio = pd.date_range(start=datetime.datetime.combine(data_inicio,hora_inicio), end=datetime.datetime.combine(data_fim,hora_inicio),tz=utc_timezone)
@@ -447,6 +462,8 @@ if treinar_modelo == 'Sim':
     st.subheader('Resultado do Modelo')
 # Dados Previstos
     new_forecast = forecast.set_index('ds', drop=True)
+    new_forecast_database = new_forecast.to_csv('new_forecast_database.csv')
+   
     new_df_treino = df_treino.set_index('ds', drop=True)
     comparacao_real_previsao = pd.concat([new_df_treino.loc[data_inicio:dia_futuro,'y'],
                                           new_forecast.loc[data_inicio:dia_futuro,'yhat']], axis=1)
@@ -602,39 +619,42 @@ if treinar_modelo == 'Sim':
 
         st.plotly_chart(fig)
         
-# Definindo parâmetros para o robô
-robo = ('Não','Sim')
-ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
-st.cache()
-if ativar_robo == 'Sim':
-    st.subheader('Parâmetros para o EA (Robô)')
-    codigo = indice_selecionado.split('$')[0]
-    c_1,c_2,c_3 = st.beta_columns((1,1,1))
-    c_1.subheader('Código Vigente')
-    if codigo == 'WIN':
-        s = symbol_info.description
-        indice = s[s.find('(')+1:s.find(')')]
-        c_1.text(indice)
-        c_2.subheader('Número de Contratos')
-        volume = c_2.slider('Selecione Quantidade',1,100)
-        c_3.subheader('Stop Loss')
-        stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(1000))
-        c_4,c_5,c_6= st.beta_columns((1,1,1))
-        c_4.subheader('Take Profit')
-        profit = c_4.number_input('Pontos para Take Profit', value=int(1000))
-        c_5.subheader('Martingale')
-        martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
-        c_5.selectbox('Qual tipo de Martingale?',martingale_list)
-        enviar_ordem = c_6.selectbox('Enviar Ordem?',robo)
+    # Definindo parâmetros para o robô
+    robo = ('Não','Sim')
+    ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
+    st.cache()
+    if ativar_robo == 'Sim':
+        st.subheader('Parâmetros para o EA (Robô)')
+        codigo = indice_selecionado.split('$')[0]
+        c_1,c_2,c_3 = st.beta_columns((1,1,1))
+        c_1.subheader('Código Vigente')
+        if codigo == 'WIN':
+            s = symbol_info.description
+            indice = s[s.find('(')+1:s.find(')')]
+            c_1.text(indice)
+            c_2.subheader('Número de Contratos')
+            volume = c_2.slider('Selecione Quantidade',1,100)
+            c_3.subheader('Stop Loss')
+            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(1000))
+            c_4,c_5,c_6= st.beta_columns((1,1,1))
+            c_4.subheader('Take Profit')
+            profit = c_4.number_input('Pontos para Take Profit', value=int(1000))
+            c_5.subheader('Martingale')
+            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+            enviar_ordem = c_6.selectbox('Enviar Ordem?',robo)
             
-        if enviar_ordem == 'Sim':                
+        
+            new_forecast_file = pd.read_csv('new_forecast_database.csv')
+            new_forecast_file['ds'] = pd.to_datetime(new_forecast_file['ds'])
+            new_forecast_file = new_forecast_file.set_index('ds', drop=True)               
             SL = stop_loss
             TP = profit
             VOLUME = volume  
-            last_day = new_forecast.index[len(new_forecast)-1].date().strftime("%Y-%m-%d")
-            today = new_forecast.loc[last_day, 'yhat']
+            last_day = new_forecast_file.index[len(new_forecast_file)-1].date().strftime("%Y-%m-%d")
+            today = new_forecast_file.loc[last_day, 'yhat']
 
-            while working_hour():
+            while working_hour() and enviar_ordem=='Sim':
                 rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
                                            dia_futuro_range['ds'][0].to_pydatetime(),2)
                 pregao_hoje = pd.DataFrame(rates)
@@ -667,31 +687,34 @@ if ativar_robo == 'Sim':
                         close_all(0)
                         time.sleep(1)
                                 
+         
+        if codigo == 'WDO':
+            s = symbol_info.description
+            indice = s[s.find('(')+1:s.find(')')]
+            c_1.text(indice)
+            c_2.subheader('Número de Contratos')
+            volume = c_2.slider('Selecione Quantidade',1,100)
+            c_3.subheader('Stop Loss')
+            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(50000))
+            c_4,c_5,c_6= st.beta_columns((1,1,1))
+            c_4.subheader('Take Profit')
+            profit = c_4.number_input('Pontos para Take Profit', value=int(50000))
+            c_5.subheader('Martingale')
+            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+            enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
+            c_6.text('Robô não está ativado')
             
-    if codigo == 'WDO':
-        s = symbol_info.description
-        indice = s[s.find('(')+1:s.find(')')]
-        c_1.text(indice)
-        c_2.subheader('Número de Contratos')
-        volume = c_2.slider('Selecione Quantidade',1,100)
-        c_3.subheader('Stop Loss')
-        stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(50000))
-        c_4,c_5,c_6= st.beta_columns((1,1,1))
-        c_4.subheader('Take Profit')
-        profit = c_4.number_input('Pontos para Take Profit', value=int(50000))
-        c_5.subheader('Martingale')
-        martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
-        c_5.selectbox('Qual tipo de Martingale?',martingale_list)
-        enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
-        c_6.text('Robô não está ativado')
-        
-        if enviar_ordem == 'Sim':                
+          
+            new_forecast_file = pd.read_csv('new_forecast_database.csv')
+            new_forecast_file['ds'] = pd.to_datetime(new_forecast_file['ds'])
+            new_forecast_file = new_forecast_file.set_index('ds', drop=True)               
             SL = stop_loss
             TP = profit
             VOLUME = volume  
             last_day = new_forecast.index[len(new_forecast)-1].date().strftime("%Y-%m-%d")
             today = new_forecast.loc[last_day, 'yhat']
-            while working_hour():
+            while working_hour() and enviar_ordem=='Sim':
                 rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
                                            dia_futuro_range['ds'][0].to_pydatetime(),2)
                 pregao_hoje = pd.DataFrame(rates)
@@ -699,7 +722,7 @@ if ativar_robo == 'Sim':
                 print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
                 print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
                 time.sleep(1)
-    
+                
                 if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
                     print('Sell signal')
                     time.sleep(1)
@@ -723,9 +746,10 @@ if ativar_robo == 'Sim':
                     else:
                         close_all(0)
                         time.sleep(1)              
+        
+
             
 
-    
 #order_entry(0,VOLUME,SL,TP)
 #close_all(0)
 #order_entry(1,VOLUME,SL,TP)  
