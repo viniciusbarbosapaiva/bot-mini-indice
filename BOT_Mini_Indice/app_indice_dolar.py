@@ -620,6 +620,7 @@ if treinar_modelo == 'Sim':
         st.plotly_chart(fig)
         
     # Definindo parâmetros para o robô
+     # Definindo parâmetros para o robô
     robo = ('Não','Sim')
     ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
     st.cache()
@@ -653,41 +654,23 @@ if treinar_modelo == 'Sim':
             VOLUME = volume  
             last_day = new_forecast_file.index[len(new_forecast_file)-1].date().strftime("%Y-%m-%d")
             today = new_forecast_file.loc[last_day, 'yhat']
-
+            date_from = today.index[0].to_pydatetime()
+            date_to = datetime.datetime.now()
+            history_orders=mt.history_orders_total(date_from, date_to)
+            
             while working_hour() and enviar_ordem=='Sim':
-                rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
-                                           dia_futuro_range['ds'][0].to_pydatetime(),2)
-                pregao_hoje = pd.DataFrame(rates)
-                pregao_hoje['time'] = pd.to_datetime(pregao_hoje['time'], unit='s')
-                print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
-                print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
-                time.sleep(1)
-    
-                if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
-                    print('Sell signal')
-                    time.sleep(1)
-                    order_entry(1,VOLUME,SL,TP)
-                    position = mt.positions_get(symbol=indice)
-                    position_type = position[0][5]
-                    if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 1 and open_orders(indice) >=1 :
-                        print('Tendência de baixa continua')
-                    else:
-                        close_all(1)
-   
-                if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2]:
-                    print('Buy signal')
-                    time.sleep(1)
-                    order_entry(0,VOLUME,SL,TP) 
-                    position = mt.positions_get(symbol=indice)
-                    position_type = position[0][5]
-                    if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 0 and open_orders(indice) >=1 :
-                        print('Tendência de alta continua')
-                        time.sleep(1)
-                    else:
-                        close_all(0)
-                        time.sleep(1)
-                                
-         
+                if history_orders >= 1:
+                    print('Náo é para operar mais hoje.')
+                    break
+                else:
+                    if today[len(today)-1] < today[0] and open_orders(indice) ==0:
+                        order_entry(1,VOLUME,SL,TP)
+                    
+                    if today[len(today)-1] > today[0] and open_orders(indice) ==0:
+                        order_entry(0,VOLUME,SL,TP)
+                    
+                
+            
         if codigo == 'WDO':
             s = symbol_info.description
             indice = s[s.find('(')+1:s.find(')')]
@@ -714,38 +697,25 @@ if treinar_modelo == 'Sim':
             VOLUME = volume  
             last_day = new_forecast.index[len(new_forecast)-1].date().strftime("%Y-%m-%d")
             today = new_forecast.loc[last_day, 'yhat']
+            date_from = today.index[0].to_pydatetime()
+            date_to = datetime.datetime.now()
+            history_orders=mt.history_orders_total(date_from, date_to)
+            
             while working_hour() and enviar_ordem=='Sim':
-                rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
-                                           dia_futuro_range['ds'][0].to_pydatetime(),2)
-                pregao_hoje = pd.DataFrame(rates)
-                pregao_hoje['time'] = pd.to_datetime(pregao_hoje['time'], unit='s')
-                print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
-                print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
-                time.sleep(1)
+                if history_orders >= 1:
+                    print('Náo é para operar mais hoje.')
+                    break
+                else:
+                    if today[len(today)-1] < today[0] and open_orders(indice) ==0:
+                        order_entry(1,VOLUME,SL,TP)
+                    
+                    if today[len(today)-1] > today[0] and open_orders(indice) ==0:
+                        order_entry(0,VOLUME,SL,TP)
+                    
                 
-                if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
-                    print('Sell signal')
-                    time.sleep(1)
-                    order_entry(1,VOLUME,SL,TP)
-                    position = mt.positions_get(symbol=indice)
-                    position_type = position[0][5]
-                    if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 1 and open_orders(indice) >=1 :
-                        print('Tendência de baixa continua')
-                    else:
-                        close_all(1)
+                
+        
    
-                if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2]:
-                    print('Buy signal')
-                    time.sleep(1)
-                    order_entry(0,VOLUME,SL,TP) 
-                    position = mt.positions_get(symbol=indice)
-                    position_type = position[0][5]
-                    if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 0 and open_orders(indice) >=1 :
-                        print('Tendência de alta continua')
-                        time.sleep(1)
-                    else:
-                        close_all(0)
-                        time.sleep(1)              
         
 
             

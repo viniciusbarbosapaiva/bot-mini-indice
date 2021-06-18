@@ -105,10 +105,136 @@ plt.savefig('Terceira_estrategia_15m.png')
 
 #################################################################################
 
+'''
+ # Definindo parâmetros para o robô
+    robo = ('Não','Sim')
+    ativar_robo = st.sidebar.selectbox("Ativar o Robô?",robo)
+    st.cache()
+    if ativar_robo == 'Sim':
+        st.subheader('Parâmetros para o EA (Robô)')
+        codigo = indice_selecionado.split('$')[0]
+        c_1,c_2,c_3 = st.beta_columns((1,1,1))
+        c_1.subheader('Código Vigente')
+        if codigo == 'WIN':
+            s = symbol_info.description
+            indice = s[s.find('(')+1:s.find(')')]
+            c_1.text(indice)
+            c_2.subheader('Número de Contratos')
+            volume = c_2.slider('Selecione Quantidade',1,100)
+            c_3.subheader('Stop Loss')
+            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(1000))
+            c_4,c_5,c_6= st.beta_columns((1,1,1))
+            c_4.subheader('Take Profit')
+            profit = c_4.number_input('Pontos para Take Profit', value=int(1000))
+            c_5.subheader('Martingale')
+            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+            enviar_ordem = c_6.selectbox('Enviar Ordem?',robo)
+            
+        
+            new_forecast_file = pd.read_csv('new_forecast_database.csv')
+            new_forecast_file['ds'] = pd.to_datetime(new_forecast_file['ds'])
+            new_forecast_file = new_forecast_file.set_index('ds', drop=True)               
+            SL = stop_loss
+            TP = profit
+            VOLUME = volume  
+            last_day = new_forecast_file.index[len(new_forecast_file)-1].date().strftime("%Y-%m-%d")
+            today = new_forecast_file.loc[last_day, 'yhat']
 
+            while working_hour() and enviar_ordem=='Sim':
+                rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
+                                           dia_futuro_range['ds'][0].to_pydatetime(),2)
+                pregao_hoje = pd.DataFrame(rates)
+                pregao_hoje['time'] = pd.to_datetime(pregao_hoje['time'], unit='s')
+                print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
+                print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
+                time.sleep(1)
+    
+                if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Sell signal')
+                    time.sleep(1)
+                    order_entry(1,VOLUME,SL,TP)
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 1 and open_orders(indice) >=1 :
+                        print('Tendência de baixa continua')
+                    else:
+                        close_all(1)
+   
+                if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Buy signal')
+                    time.sleep(1)
+                    order_entry(0,VOLUME,SL,TP) 
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 0 and open_orders(indice) >=1 :
+                        print('Tendência de alta continua')
+                        time.sleep(1)
+                    else:
+                        close_all(0)
+                        time.sleep(1)
+                                
+         
+        if codigo == 'WDO':
+            s = symbol_info.description
+            indice = s[s.find('(')+1:s.find(')')]
+            c_1.text(indice)
+            c_2.subheader('Número de Contratos')
+            volume = c_2.slider('Selecione Quantidade',1,100)
+            c_3.subheader('Stop Loss')
+            stop_loss = c_3.number_input('Pontos para Stop Loss', value=int(50000))
+            c_4,c_5,c_6= st.beta_columns((1,1,1))
+            c_4.subheader('Take Profit')
+            profit = c_4.number_input('Pontos para Take Profit', value=int(50000))
+            c_5.subheader('Martingale')
+            martingale_list = ['Não Utilizar', 'Sim. Moderado','Sim. Agressivo']
+            c_5.selectbox('Qual tipo de Martingale?',martingale_list)
+            enviar_ordem = c_6.button('Click Aqui para Enviar Ordem')
+            c_6.text('Robô não está ativado')
+            
+          
+            new_forecast_file = pd.read_csv('new_forecast_database.csv')
+            new_forecast_file['ds'] = pd.to_datetime(new_forecast_file['ds'])
+            new_forecast_file = new_forecast_file.set_index('ds', drop=True)               
+            SL = stop_loss
+            TP = profit
+            VOLUME = volume  
+            last_day = new_forecast.index[len(new_forecast)-1].date().strftime("%Y-%m-%d")
+            today = new_forecast.loc[last_day, 'yhat']
+            while working_hour() and enviar_ordem=='Sim':
+                rates = mt.copy_rates_from(indice_selecionado,timeframes[timeframe_selecionado],
+                                           dia_futuro_range['ds'][0].to_pydatetime(),2)
+                pregao_hoje = pd.DataFrame(rates)
+                pregao_hoje['time'] = pd.to_datetime(pregao_hoje['time'], unit='s')
+                print('Tempo anterior: ',pregao_hoje['time'][len(pregao_hoje)-2],'Preço anterior: ', pregao_hoje['close'][len(pregao_hoje)-2])
+                print('Tempo agora: ',pregao_hoje['time'][len(pregao_hoje)-1],'Preço previsto: ',today.loc[pregao_hoje['time'][1]])
+                time.sleep(1)
+                
+                if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Sell signal')
+                    time.sleep(1)
+                    order_entry(1,VOLUME,SL,TP)
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] < pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 1 and open_orders(indice) >=1 :
+                        print('Tendência de baixa continua')
+                    else:
+                        close_all(1)
+   
+                if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2]:
+                    print('Buy signal')
+                    time.sleep(1)
+                    order_entry(0,VOLUME,SL,TP) 
+                    position = mt.positions_get(symbol=indice)
+                    position_type = position[0][5]
+                    if today.loc[pregao_hoje['time'][1]] > pregao_hoje['close'][len(pregao_hoje)-2] and position_type == 0 and open_orders(indice) >=1 :
+                        print('Tendência de alta continua')
+                        time.sleep(1)
+                    else:
+                        close_all(0)
+                        time.sleep(1)              
 
-
-
+'''
 
 
 
