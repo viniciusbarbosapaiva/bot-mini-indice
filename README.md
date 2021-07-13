@@ -33,4 +33,4 @@ Between 2021-01-01 and 2021-06-09, the model hit the trend 63.55% and missed 36.
 ### Video Program
 Please, download the video to watch the app running.
 
-![App Video](https://github.com/viniciusbarbosapaiva/controle_desenho/blob/main/Controle.wmv)
+![App Video](https://github.com/viniciusbarbosapaiva/bot-mini-indice/blob/main/BOT_Mini_Indice/robo.mp4)
